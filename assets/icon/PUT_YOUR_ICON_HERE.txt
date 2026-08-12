@@ -1,0 +1,12 @@
+Place your icon image here, named exactly: icon.png
+
+Requirements:
+- Square image (e.g. 1024x1024px)
+- PNG format
+- No transparency needed, but works fine either way
+
+Once it's here, run these two commands in Command Prompt from your project folder:
+  flutter pub get
+  flutter pub run flutter_launcher_icons
+
+That regenerates every icon size Android needs automatically. Then run the app as normal.
