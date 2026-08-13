@@ -9,5 +9,5 @@
 // This is intentionally the ONLY file you should need to edit to connect this app to your own
 // Supabase project — nothing else references these values directly.
 
-const String supabaseUrl = 'PASTE_YOUR_PROJECT_URL_HERE'; // e.g. https://xxxxx.supabase.co
-const String supabasePublishableKey = 'PASTE_YOUR_PUBLISHABLE_KEY_HERE'; // starts with sb_publishable_
+const String supabaseUrl = 'https://kpajocmfrfkazaelbocw.supabase.co'; // e.g. https://xxxxx.supabase.co
+const String supabasePublishableKey = 'sb_publishable_xUOngckXVIPOIJ8vyOQtuQ_wtWD6Xec'; // starts with sb_publishable_
