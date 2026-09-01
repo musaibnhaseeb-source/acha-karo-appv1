@@ -1,0 +1,5 @@
+The logo is wrong, it was sindhi ajrak background with acha karo written in urdu as on the email signup screen which has been removed with the marquee, in this update.
+
+Find all the bugs and let's move to apk readiness, hide the mock data and simulator, ensure that the deeds are credited against the correct user, I tested by using a new account and it did not show up in the moderator screen to approve but was already present in the DB, look at other errors and address them accordingly, correct logo based on the code or reference the html if need be to replace the icon and update the splash screen accordingly. 
+
+I am seriously running out of time, we need to have a deployment ready model and test it out before we go to apk

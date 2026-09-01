@@ -1,0 +1,50 @@
+:root {
+  --olive: #9FAE6E;
+  --olive-deep: #3C4A2C;
+  --olive-card: rgba(159, 174, 110, 0.08);
+  --olive-card-strong: rgba(159, 174, 110, 0.14);
+  --gold: #D9A62E;
+  --rust: #C1573D;
+  --text: #F6F5EC;
+  --text-soft: #C9CDBC;
+  --ink-on-gold: #1B1706;
+  --bg1: #081209;
+  --bg2: #0F2016;
+  --line: rgba(246, 245, 236, 0.14);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: var(--font-inter), sans-serif;
+  color: var(--text);
+  background: linear-gradient(160deg, var(--bg2), var(--bg1));
+  background-attachment: fixed;
+}
+
+h1, h2, h3 {
+  font-family: var(--font-fraunces), serif;
+  margin: 0;
+}
+
+.mono {
+  font-family: var(--font-mono), monospace;
+}
+
+a {
+  color: inherit;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+}
+
+::selection {
+  background: var(--gold);
+  color: var(--ink-on-gold);
+}

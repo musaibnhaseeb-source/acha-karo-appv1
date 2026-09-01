@@ -1,0 +1,9 @@
+# Real, necessary before any push — without this, node_modules alone would add
+# hundreds of megabytes of files that should never be in version control.
+
+node_modules/
+.next/
+.env.local
+.env*.local
+*.log
+.DS_Store
