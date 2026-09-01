@@ -4,6 +4,7 @@ import { useEffect, useState, useMemo } from 'react';
 import Link from 'next/link';
 import { supabase } from '../../../lib/supabaseClient';
 import { DEED_CATALOG, CATEGORIES } from '../../../lib/deedCatalog';
+import { displayIcon } from '../../../lib/displayIcon';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const CAT_COLORS = ['#D9A62E', '#9FAE6E', '#C1573D', '#6B7A8C'];
@@ -153,81 +154,69 @@ export default function AnalyticsPage() {
   if (loading) return <p style={{ color: 'var(--text-soft)', fontSize: 13 }}>Loading…</p>;
 
   const maxCatCount = Math.max(...categoryBreakdown.map((c) => c.count), 1);
-  const ageTotal = Object.values(ageGroups.buckets).reduce((a, b) => a + b, 0) || 1;
-  const donutSegments = buildDonutSegments(ageGroups.buckets, ageTotal);
   const linePoints = buildLinePoints(dailyData);
 
   return (
-    <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
-        <div>
-          <h2 style={{ fontSize: 18, fontWeight: 600 }}>Analytics</h2>
-        </div>
-        {/* E: timeline slider */}
-        <TimelineSlider start={rangeStart} end={rangeEnd} onChange={(s, e) => { setSelectedCampaignId(''); setRangeStart(s); setRangeEnd(e); }} />
+    <div style={{ height: 'calc(100vh - 100px)', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ marginBottom: 16, flexShrink: 0 }}>
+        <h1 style={{ fontSize: 22 }}>Analytics</h1>
       </div>
 
-      {/* F: campaign dropdown */}
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 20 }}>
-        <select value={selectedCampaignId} onChange={(e) => selectCampaign(e.target.value)} style={dropdownStyle}>
+      {/* Real fix here: date range and the campaign filter used to sit on two separate rows,
+          with the range itself being a dual-handle slider rather than real, precise dates.
+          Now real calendar inputs, and everything in one row, per direction. */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20, flexShrink: 0, flexWrap: 'wrap' }}>
+        <label style={{ fontSize: 11.5, color: 'var(--text-soft)' }}>From</label>
+        <input
+          type="date"
+          value={rangeStart.toISOString().slice(0, 10)}
+          onChange={(e) => { setSelectedCampaignId(''); setRangeStart(new Date(e.target.value)); }}
+          style={dropdownStyle}
+        />
+        <label style={{ fontSize: 11.5, color: 'var(--text-soft)' }}>To</label>
+        <input
+          type="date"
+          value={rangeEnd.toISOString().slice(0, 10)}
+          onChange={(e) => { setSelectedCampaignId(''); setRangeEnd(new Date(e.target.value)); }}
+          style={dropdownStyle}
+        />
+        <select value={selectedCampaignId} onChange={(e) => selectCampaign(e.target.value)} style={{ ...dropdownStyle, marginLeft: 'auto' }}>
           <option value="">All activity</option>
           {campaigns.map((c) => (
-            <option key={c.id} value={c.id}>{c.icon.startsWith('http') ? '' : `${c.icon} `}{c.title}</option>
+            <option key={c.id} value={c.id}>{displayIcon(c.icon)} {c.title}</option>
           ))}
         </select>
       </div>
 
-      <div style={{ display: 'flex', gap: 20 }}>
-        {/* A: stat cards */}
-        <div style={{ width: 280, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <StatCard label="Total Users" value={totalUsers.toLocaleString()} />
-          <StatCard label="Active Users (7d)" value={activeUsers.toLocaleString()} sub={totalUsers ? `${((activeUsers / totalUsers) * 100).toFixed(1)}% of total` : null} />
-          <StatCard label="Total Deeds" value={totalDeeds.toLocaleString()} />
-          <StatCard label="Pushed for Moderation" value={moderationCount.toLocaleString()} color="var(--rust)" />
-          <StatCard
-            label="Most Actioned Deed"
-            value={mostActioned ? `${DEED_CATALOG[mostActioned.type]?.icon ?? ''} ${DEED_CATALOG[mostActioned.type]?.name ?? mostActioned.type}` : '—'}
-            sub={mostActioned ? `${mostActioned.count.toLocaleString()} submissions` : null}
-            small
-          />
-          <StatCard label="#1 User" value={topUser ? <Link href={`/admin/users/${topUser.id}`} style={{ color: 'var(--gold)', textDecoration: 'none' }}>{topUser.name}</Link> : '—'} sub={topUser?.email} small mono />
-          <StatCard label="Points Accumulated" value={pointsAccumulated.toLocaleString()} sub="across all users, all time" />
-          <StatCard label="Points Redeemed" value={pointsRedeemed.toLocaleString()} sub="spent on vehicle skins, all time" />
-          <StatCard label="Roadmap Completions" value={roadmapCompletions.toLocaleString()} sub="full Hall of Fame claims, all campaigns" />
-          <StatCard label="Average Rating" value={avgRating ? `${avgRating} ★` : '—'} sub={`${feedback.length.toLocaleString()} feedback received`} />
-        </div>
-
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 20 }}>
+      {/* Real layout fix, per direction: graphs on the 60% side, stat cards on the 40% side —
+          both a real proportional split now, not a fixed-width sidebar. */}
+      <div style={{ display: 'flex', gap: 20, flex: 1, minHeight: 0 }}>
+        <div style={{ flex: 6, minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 20 }}>
           <div style={{ display: 'flex', gap: 20 }}>
-            {/* B: donut */}
-            <div style={{ ...panelStyle, width: 340, flexShrink: 0 }}>
+            {/* Age groups — now a real bar chart, per direction, replacing the donut */}
+            <div style={{ ...panelStyle, flex: 1 }}>
               <div style={panelTitleStyle}>Age Groups</div>
               {ageGroups.known === 0 ? (
                 <p style={{ fontSize: 12, color: 'var(--text-soft)' }}>No date-of-birth data yet.</p>
               ) : (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
-                  <svg width={140} height={140} viewBox="0 0 140 140">
-                    <circle cx="70" cy="70" r="55" fill="none" stroke="var(--olive-deep)" strokeWidth="20" />
-                    {donutSegments.map((seg, i) => (
-                      <circle key={i} cx="70" cy="70" r="55" fill="none" stroke={CAT_COLORS[i % CAT_COLORS.length]} strokeWidth="20"
-                        strokeDasharray={`${seg.length} ${345.4 - seg.length}`} strokeDashoffset={-seg.offset} transform="rotate(-90 70 70)" />
-                    ))}
-                    <text x="70" y="66" textAnchor="middle" fontSize="20" fontWeight="700" fill="var(--text)">{formatCompact(ageTotal)}</text>
-                    <text x="70" y="82" textAnchor="middle" fontSize="9" fill="var(--text-soft)">users</text>
-                  </svg>
-                  <div>
-                    {Object.entries(ageGroups.buckets).map(([label, count], i) => (
-                      <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, marginBottom: 8 }}>
-                        <div style={{ width: 10, height: 10, borderRadius: 3, background: CAT_COLORS[i % CAT_COLORS.length] }} />
-                        {label} · {Math.round((count / ageTotal) * 100)}%
+                <div style={{ display: 'flex', alignItems: 'flex-end', gap: 16, height: 146, paddingTop: 10 }}>
+                  {Object.entries(ageGroups.buckets).map(([label, count], i) => {
+                    const maxBucket = Math.max(...Object.values(ageGroups.buckets), 1);
+                    const heightPct = (count / maxBucket) * 100;
+                    return (
+                      <div key={label} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, height: '100%', justifyContent: 'flex-end' }}>
+                        <span style={{ fontSize: 11, fontWeight: 700 }}>{count}</span>
+                        <div style={{ width: '100%', height: `${Math.max(heightPct, 3)}%`, background: CAT_COLORS[i % CAT_COLORS.length], borderRadius: '6px 6px 0 0' }} />
+                        <span style={{ fontSize: 10.5, color: 'var(--text-soft)' }}>{label}</span>
                       </div>
-                    ))}
-                  </div>
+                    );
+                  })}
                 </div>
               )}
             </div>
 
-            {/* C: line graph */}
+            {/* Daily usage line graph — same as before, unchanged, just resized to match the
+                new layout */}
             <div style={{ ...panelStyle, flex: 1 }}>
               <div style={panelTitleStyle}>Daily Usage & New Registrations</div>
               <div style={{ display: 'flex', gap: 20, marginBottom: 12 }}>
@@ -248,7 +237,7 @@ export default function AnalyticsPage() {
             </div>
           </div>
 
-          {/* D: category breakdown */}
+          {/* Category breakdown — below both, per direction */}
           <div style={panelStyle}>
             <div style={panelTitleStyle}>Category Breakdown</div>
             {categoryBreakdown.every((c) => c.count === 0) ? (
@@ -274,6 +263,25 @@ export default function AnalyticsPage() {
             )}
           </div>
         </div>
+
+        {/* Stat cards — 40% side, per direction */}
+        <div style={{ flex: 4, minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <StatCard label="Total Users" value={totalUsers.toLocaleString()} />
+          <StatCard label="Active Users (7d)" value={activeUsers.toLocaleString()} sub={totalUsers ? `${((activeUsers / totalUsers) * 100).toFixed(1)}% of total` : null} />
+          <StatCard label="Total Deeds" value={totalDeeds.toLocaleString()} />
+          <StatCard label="Pushed for Moderation" value={moderationCount.toLocaleString()} color="var(--rust)" />
+          <StatCard
+            label="Most Actioned Deed"
+            value={mostActioned ? `${DEED_CATALOG[mostActioned.type]?.icon ?? ''} ${DEED_CATALOG[mostActioned.type]?.name ?? mostActioned.type}` : '—'}
+            sub={mostActioned ? `${mostActioned.count.toLocaleString()} submissions` : null}
+            small
+          />
+          <StatCard label="#1 User" value={topUser ? <Link href={`/admin/users/${topUser.id}`} style={{ color: 'var(--gold)', textDecoration: 'none' }}>{topUser.name}</Link> : '—'} sub={topUser?.email} small mono />
+          <StatCard label="Points Accumulated" value={pointsAccumulated.toLocaleString()} sub="across all users, all time" />
+          <StatCard label="Points Redeemed" value={pointsRedeemed.toLocaleString()} sub="spent on vehicle skins, all time" />
+          <StatCard label="Roadmap Completions" value={roadmapCompletions.toLocaleString()} sub="full Hall of Fame claims, all campaigns" />
+          <StatCard label="Average Rating" value={avgRating ? `${avgRating} ★` : '—'} sub={`${feedback.length.toLocaleString()} feedback received`} />
+        </div>
       </div>
     </div>
   );
@@ -298,46 +306,6 @@ function LegendDot({ color, label }) {
   );
 }
 
-// A dual-handle range slider built from two overlapping native <input type="range"> elements —
-// no extra charting/slider library needed for this.
-function TimelineSlider({ start, end, onChange }) {
-  const [minDate] = useState(() => new Date(Date.now() - 180 * DAY_MS));
-  const [maxDate] = useState(() => new Date());
-  const totalDays = Math.round((maxDate - minDate) / DAY_MS);
-  const startPct = Math.round((start - minDate) / DAY_MS);
-  const endPct = Math.round((end - minDate) / DAY_MS);
-
-  function fmt(d) {
-    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-  }
-
-  return (
-    <div style={{ background: 'var(--olive-card)', border: '1px solid var(--line)', borderRadius: 100, padding: '10px 18px', display: 'flex', alignItems: 'center', gap: 12 }}>
-      <span className="mono" style={{ fontSize: 10.5, color: 'var(--text-soft)' }}>{fmt(start)}</span>
-      <div style={{ position: 'relative', width: 200, height: 20 }}>
-        <input type="range" min={0} max={totalDays} value={startPct}
-          onChange={(e) => { const v = Math.min(+e.target.value, endPct); onChange(new Date(minDate.getTime() + v * DAY_MS), end); }}
-          style={rangeInputStyle} />
-        <input type="range" min={0} max={totalDays} value={endPct}
-          onChange={(e) => { const v = Math.max(+e.target.value, startPct); onChange(start, new Date(minDate.getTime() + v * DAY_MS)); }}
-          style={rangeInputStyle} />
-      </div>
-      <span className="mono" style={{ fontSize: 10.5, color: 'var(--text-soft)' }}>{fmt(end)}</span>
-    </div>
-  );
-}
-
-function buildDonutSegments(buckets, total) {
-  const circumference = 345.4; // 2 * PI * 55
-  let offset = 0;
-  return Object.values(buckets).map((count) => {
-    const length = (count / total) * circumference;
-    const seg = { length, offset };
-    offset += length;
-    return seg;
-  });
-}
-
 function buildLinePoints(dailyData) {
   if (dailyData.length === 0) return { active: '', registrations: '' };
   const maxActive = Math.max(...dailyData.map((d) => d.active), 1);
@@ -348,13 +316,9 @@ function buildLinePoints(dailyData) {
   return { active: activePts, registrations: regPts };
 }
 
-function formatCompact(n) {
-  if (n >= 1000) return `${(n / 1000).toFixed(1)}K`;
-  return `${n}`;
-}
-
 const panelStyle = { background: 'var(--olive-card)', border: '1px solid var(--line)', borderRadius: 16, padding: 20 };
 const panelTitleStyle = { fontSize: 13, fontWeight: 700, marginBottom: 14 };
-const dropdownStyle = { background: 'var(--olive-card)', border: '1px solid var(--line)', borderRadius: 10, padding: '10px 16px', fontSize: 13, color: 'var(--text)' };
+// Real fix here: this still used the older, low-contrast background — inconsistent with the
+// readability fix already applied to inputs everywhere else in the admin site.
+const dropdownStyle = { background: '#1A2818', border: '1px solid rgba(246, 245, 236, 0.28)', borderRadius: 9, padding: '10px 14px', fontSize: 13, color: 'var(--text)', fontFamily: 'inherit' };
 const tooltipStyle = { position: 'absolute', top: -46, left: 20, background: '#050A06', border: '1px solid var(--gold)', borderRadius: 8, padding: '8px 12px', fontSize: 10.5, whiteSpace: 'nowrap', zIndex: 10 };
-const rangeInputStyle = { position: 'absolute', top: 0, left: 0, width: '100%', margin: 0, appearance: 'none', background: 'transparent', pointerEvents: 'auto' };

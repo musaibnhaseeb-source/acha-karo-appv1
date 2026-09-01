@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { supabase } from '../../../lib/supabaseClient';
+import { displayIcon } from '../../../lib/displayIcon';
 
 // Complete redesign, per direction — real-world reward coordination organized by campaign
 // (not a flat list), a real bulk-invite form matching the invites table's own columns, and a
@@ -104,7 +105,7 @@ export default function RewardsPage() {
               ) : (
                 campaignGroups.map((g) => (
                   <div key={g.campaign.id} style={campaignRowStyle}>
-                    <div style={campaignIconStyle}>{g.campaign.icon}</div>
+                    <div style={campaignIconStyle}>{displayIcon(g.campaign.icon)}</div>
                     <div style={{ flex: 1, fontWeight: 600, fontSize: 13.5 }}>{g.campaign.title}</div>
                     <span style={{ fontSize: 11, color: 'var(--text-soft)', marginRight: 10 }}>{g.winners.length} winner{g.winners.length === 1 ? '' : 's'}</span>
                     <button onClick={() => setOpenCampaign(g)} style={btnGhost}>Manage</button>
@@ -126,7 +127,7 @@ export default function RewardsPage() {
                   const seenCount = g.winners.filter((w) => w.seen).length;
                   return (
                     <div key={g.campaign.id} style={{ marginBottom: 18 }}>
-                      <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--gold)', marginBottom: 8 }}>{g.campaign.icon} {g.campaign.title}</div>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--gold)', marginBottom: 8 }}>{displayIcon(g.campaign.icon)} {g.campaign.title}</div>
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                         <div style={statCardStyle}><div style={statValueStyle}>{g.winners.length}</div><div style={statLabelStyle}>Winners</div></div>
                         <div style={statCardStyle}><div style={statValueStyle}>{seenCount}</div><div style={statLabelStyle}>Seen</div></div>
@@ -310,7 +311,7 @@ function statusPillStyle(status) {
 const panelStyle = { background: 'var(--olive-card)', border: '1px solid var(--line)', borderRadius: 16, padding: 20, height: '100%', display: 'flex', flexDirection: 'column' };
 const panelTitleStyle = { fontSize: 13, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, color: 'var(--text-soft)', marginBottom: 14, flexShrink: 0 };
 const campaignRowStyle = { display: 'flex', alignItems: 'center', gap: 12, padding: 12, borderRadius: 12, marginBottom: 8, background: 'var(--olive-card-strong)' };
-const campaignIconStyle = { width: 36, height: 36, borderRadius: 8, background: 'var(--gold)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 };
+const campaignIconStyle = { width: 48, height: 48, borderRadius: 10, background: 'var(--gold)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 };
 const winnerRowStyle = { display: 'flex', alignItems: 'center', gap: 12, padding: 12, borderRadius: 12, marginBottom: 8, background: 'var(--olive-card-strong)' };
 const statCardStyle = { background: 'var(--olive-card-strong)', borderRadius: 10, padding: '10px 12px' };
 const statValueStyle = { fontSize: 18, fontWeight: 700, fontFamily: 'Georgia, serif' };

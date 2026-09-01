@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { supabase } from '../../../lib/supabaseClient';
+import { displayIcon } from '../../../lib/displayIcon';
 
 // Real, functional Campaigns management — replaces the earlier static mockup entirely. Layout
 // is fixed to the viewport (no page-level scroll at all); the two 60/40 panels and the edit
@@ -19,7 +20,7 @@ export default function CampaignsPage() {
 
   async function load() {
     setLoading(true);
-    const { data, error } = await supabase.from('campaigns').select('*').order('title');
+    const { data, error } = await supabase.from('campaigns').select('*').order('created_at', { ascending: false });
     if (error) {
       setLoadError(error.message);
       setLoading(false);
@@ -91,7 +92,7 @@ export default function CampaignsPage() {
               ) : (
                 campaigns.map((c) => (
                   <div key={c.id} style={campaignRowStyle}>
-                    <div style={campaignIconStyle}>{c.icon}</div>
+                    <div style={campaignIconStyle}>{displayIcon(c.icon)}</div>
                     <div style={{ flex: 1, fontWeight: 600, fontSize: 13.5 }}>{c.title}</div>
                     <span style={c.active ? pillActive : pillInactive}>{c.active ? 'Active' : 'Inactive'}</span>
                     <button onClick={() => setEditing(c)} style={btnGhost}>View / Edit</button>
@@ -113,7 +114,7 @@ export default function CampaignsPage() {
                   const s = liveStats[c.id];
                   return (
                     <div key={c.id} style={{ marginBottom: 22 }}>
-                      <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--gold)', marginBottom: 10 }}>{c.icon} {c.title}</div>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--gold)', marginBottom: 10 }}>{displayIcon(c.icon)} {c.title}</div>
                       {!s ? (
                         <p style={{ fontSize: 11, color: 'var(--text-soft)' }}>Loading stats…</p>
                       ) : (
@@ -531,7 +532,7 @@ function Field({ label, full, children }) {
 const panelStyle = { background: 'var(--olive-card)', border: '1px solid var(--line)', borderRadius: 16, padding: 20, height: '100%', display: 'flex', flexDirection: 'column' };
 const panelTitleStyle = { fontSize: 13, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, color: 'var(--text-soft)', marginBottom: 14, flexShrink: 0 };
 const campaignRowStyle = { display: 'flex', alignItems: 'center', gap: 12, padding: 12, borderRadius: 12, marginBottom: 8, background: 'var(--olive-card-strong)' };
-const campaignIconStyle = { width: 36, height: 36, borderRadius: 8, background: 'var(--gold)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 };
+const campaignIconStyle = { width: 48, height: 48, borderRadius: 10, background: 'var(--gold)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 };
 const pillActive = { fontSize: 9.5, fontWeight: 700, padding: '3px 9px', borderRadius: 100, background: 'rgba(159, 174, 110, 0.25)', color: 'var(--olive)' };
 const pillInactive = { fontSize: 9.5, fontWeight: 700, padding: '3px 9px', borderRadius: 100, background: 'rgba(201, 205, 188, 0.15)', color: 'var(--text-soft)' };
 const btnGold = { background: 'var(--gold)', color: 'var(--ink-on-gold)', border: 'none', borderRadius: 100, padding: '10px 20px', fontWeight: 700, fontSize: 13 };
