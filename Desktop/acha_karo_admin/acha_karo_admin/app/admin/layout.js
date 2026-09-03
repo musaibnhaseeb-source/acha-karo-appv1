@@ -8,6 +8,8 @@ import { supabase } from '../../lib/supabaseClient';
 const TABS = [
   { href: '/admin/users', label: 'Users', icon: '👤' },
   { href: '/admin/campaigns', label: 'Campaigns', icon: '🚩' },
+  { href: '/admin/skins', label: 'Skins & Hall of Fame', icon: '🎨' },
+  { href: '/admin/badges', label: 'Badge Freeze', icon: '🏅' },
   { href: '/admin/moderation', label: 'Moderation', icon: '🛡️' },
   { href: '/admin/feedback', label: 'Feedback', icon: '💬' },
   { href: '/admin/rewards', label: 'Rewards', icon: '🏆' },
