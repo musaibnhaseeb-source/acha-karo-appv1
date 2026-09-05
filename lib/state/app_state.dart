@@ -7,16 +7,19 @@ import 'package:geolocator/geolocator.dart';
 import '../data/deed_catalog.dart';
 import '../data/badges.dart';
 import '../data/tiers.dart';
+import '../utils/notifications.dart';
 import '../data/remote_config.dart';
 
 const Duration cooldownDuration = Duration(hours: 1); // same 1hr cooldown as the original
 
-// Donation-category deeds always go to moderation, regardless of GPS/repeat status — a photo of
-// food or a receipt needs a human to actually confirm, unlike e.g. litter clean-up where the
-// photo is usually self-evident.
-const Set<String> donationDeedTypes = {
-  'donateSupplies', 'shareMeal', 'donateBooks', 'donateBlood', 'donateFirstAid', 'donateMedicines',
-};
+class RealLeaderboardEntry {
+  final String id;
+  final String name;
+  final String city;
+  final int points;
+  final int badgeCount;
+  const RealLeaderboardEntry({required this.id, required this.name, required this.city, required this.points, required this.badgeCount});
+}
 
 class CityDeedCount {
   final String city;
@@ -38,7 +41,11 @@ class DeedLogEntry {
   // moment the app was reopened, even though it genuinely happened today. This field is the
   // real fix — actual calendar-date filtering, independent of the simDay hack entirely.
   final String status; // 'approved' | 'pending' | 'rejected'
-  DeedLogEntry({this.id, required this.type, required this.points, required this.day, required this.createdAt, required this.status});
+  final String? campaignId; // new — which campaign this deed was submitted through, if any.
+  // Needed so roadmap progress can be counted correctly per-campaign, especially with multiple
+  // campaigns potentially running simultaneously — real gap identified and fixed here, not
+  // present when progress was only ever filtered by date.
+  DeedLogEntry({this.id, required this.type, required this.points, required this.day, required this.createdAt, required this.status, this.campaignId});
 }
 
 class ModerationQueueItem {
@@ -63,7 +70,8 @@ class SubmitResult {
   final bool flagged;
   final TierDef? leveledUpTier;
   final List<int> newMilestones;
-  const SubmitResult({required this.flagged, required this.leveledUpTier, required this.newMilestones});
+  final bool blockedByCooldown; // new — see submitPhotoDeed for why this needed a real, data-layer check
+  const SubmitResult({required this.flagged, required this.leveledUpTier, required this.newMilestones, this.blockedByCooldown = false});
 }
 
 // Ported from the notifications system in the original — ready infrastructure, but nothing in
@@ -184,6 +192,11 @@ const List<List<Color>> wallpaperSwatches = [
 class AppState extends ChangeNotifier {
   int simDay = 1;
   UserProfile user = UserProfile();
+  // New — real, private membership number (AK-100001 style). Loaded from the separate
+  // membership_numbers table, not a column on profiles — see membership_numbers.sql for why:
+  // that table's own security rule means only you can ever fetch your own row, so this is
+  // genuinely private, not just something the app chooses not to display elsewhere.
+  String? membershipNumber;
   List<DeedLogEntry> deedsLog = [];
   List<ModerationQueueItem> moderationQueue = [];
   Map<String, DateTime> lastLoggedAt = {};
@@ -221,8 +234,9 @@ class AppState extends ChangeNotifier {
     }
   }
   int townVoiceWins = 0; // never actually incremented anywhere — same honest placeholder as the original
-  int dailyMilestoneDay = 1;
-  Set<int> dailyMilestonesHit = {}; // which of 3/5/7 have already been celebrated today — resets on a new simDay
+  // dailyMilestoneDateKey/dailyMilestonesHit removed — that whole persisted "already celebrated
+  // today" tracking was the actual regression (see _checkDailyMilestones below for the fix that
+  // replaced it, needing no persisted state at all).
   List<AppNotification> notifications = [];
 
   // Settings — ported from the original's known settings sheet logic (text scale, sound,
@@ -232,6 +246,16 @@ class AppState extends ChangeNotifier {
   String textScale = 'default'; // 'down' | 'default' | 'up'
   bool soundEnabled = true; // stored preference — no actual sound effects exist to toggle yet
   int wallpaperSwatchIndex = 0; // matches wallpaperSwatches below
+  // Real, final direction — global equip, confirmed after a genuine policy discussion: since
+  // campaigns are time-limited, a skin permanently locked to one specific, possibly-expired
+  // campaign would make ownership pointless long-term. One skin, equipped globally, shown on
+  // whichever roadmap is currently open — reuses profiles.active_skin_id, which already existed
+  // in the schema. Automatically reset to null by a real database trigger the moment any new
+  // campaign goes active (see reset_equipped_skin_on_campaign_launch.sql) — not app logic, so
+  // it can never be missed regardless of how a campaign gets activated.
+  String? equippedSkinId;
+  String? equippedSkinIcon;
+  Set<String> completedCampaignIds = {}; // new — which campaigns this user has fully claimed the Hall of Fame for, drives the tick mark on Home
 
   // See lib/data/remote_config.dart for the full explanation — this is the single source every
   // screen reads campaign/YouTube-link content from. Populated with local defaults for now;
@@ -242,6 +266,50 @@ class AppState extends ChangeNotifier {
   // Real load now — campaigns/app_config are both publicly readable (see the schema's RLS:
   // "using (true)"), so this works regardless of auth state. Falls back to the local defaults
   // already sitting in remoteConfig if this fails, rather than showing nothing.
+  // New — real app-update notification state. Null means nothing to show.
+  Map<String, dynamic>? pendingUpdate;
+
+  Future<void> checkForUpdate() async {
+    try {
+      final uid = Supabase.instance.client.auth.currentUser?.id;
+      if (uid == null) return;
+
+      final updateRow = await Supabase.instance.client.from('app_updates').select().eq('active', true).order('created_at', ascending: false).limit(1).maybeSingle();
+      if (updateRow == null) return;
+
+      final profileRow = await Supabase.instance.client.from('profiles').select('joined_at, last_acked_update_id').eq('id', uid).maybeSingle();
+      if (profileRow == null) return;
+
+      // A genuinely new joiner, downloading after this update already existed, is already on
+      // the latest build — never shown to them at all.
+      final joinedAt = profileRow['joined_at'] != null ? DateTime.parse(profileRow['joined_at'] as String) : null;
+      final createdAt = DateTime.parse(updateRow['created_at'] as String);
+      if (joinedAt != null && joinedAt.isAfter(createdAt)) return;
+
+      // Already acknowledged this specific update — never shown again for it.
+      if (profileRow['last_acked_update_id'] == updateRow['id']) return;
+
+      pendingUpdate = updateRow;
+      notifyListeners();
+    } catch (_) {
+      // Never blocks the rest of the app over this.
+    }
+  }
+
+  Future<void> acknowledgeUpdate() async {
+    final uid = Supabase.instance.client.auth.currentUser?.id;
+    final updateId = pendingUpdate?['id'];
+    if (uid == null || updateId == null) return;
+    pendingUpdate = null;
+    notifyListeners();
+    try {
+      await Supabase.instance.client.from('profiles').update({'last_acked_update_id': updateId}).eq('id', uid);
+    } catch (_) {
+      // The popup is already dismissed either way — a failed write here just means it might
+      // show again next launch, not a broken experience right now.
+    }
+  }
+
   Future<void> loadRemoteConfig() async {
     try {
       final campaignRows = await Supabase.instance.client.from('campaigns').select();
@@ -257,9 +325,22 @@ class AppState extends ChangeNotifier {
             startDate: c['start_date'] != null ? DateTime.tryParse(c['start_date'] as String) : null,
             endDate: c['end_date'] != null ? DateTime.tryParse(c['end_date'] as String) : null,
             cooldownMinutesOverride: c['cooldown_minutes_override'] as int?,
+            hofBadgeName: c['hof_badge_name'] as String?,
+            hofBadgeIcon: c['hof_badge_icon'] as String?,
+            hofStickerName: c['hof_sticker_name'] as String?,
+            hofStickerIcon: c['hof_sticker_icon'] as String?,
+            hofYoutubeVideoId: c['hof_youtube_video_id'] as String?,
+            defaultVehicleIcon: c['default_vehicle_icon'] as String? ?? '🚚',
+            roadmapBgColor1: c['roadmap_bg_color_1'] as String?,
+            roadmapBgColor2: c['roadmap_bg_color_2'] as String?,
+            roadmapRoadColor: c['roadmap_road_color'] as String?,
+            termsAndConditions: c['terms_and_conditions'] as String?,
+            teaserActive: c['teaser_active'] as bool? ?? false,
+            teaserDescription: c['teaser_description'] as String?,
           )).toList();
 
       var townVoice = remoteConfig.townVoice;
+      var weeklyLeaderboardActive = remoteConfig.weeklyLeaderboardActive;
       final configRows = await Supabase.instance.client.from('app_config').select().limit(1);
       if (configRows.isNotEmpty) {
         final row = configRows.first;
@@ -268,10 +349,12 @@ class AppState extends ChangeNotifier {
           dayLabel: row['town_voice_day_label'] as String? ?? townVoice.dayLabel,
           timeLabel: row['town_voice_time_label'] as String? ?? townVoice.timeLabel,
           durationLabel: row['town_voice_duration_label'] as String? ?? townVoice.durationLabel,
+          active: row['town_voice_active'] as bool? ?? false,
         );
+        weeklyLeaderboardActive = row['weekly_leaderboard_active'] as bool? ?? false;
       }
 
-      remoteConfig = RemoteConfig(townVoice: townVoice, campaigns: campaigns);
+      remoteConfig = RemoteConfig(townVoice: townVoice, campaigns: campaigns, weeklyLeaderboardActive: weeklyLeaderboardActive);
       notifyListeners();
     } catch (_) {
       // Stays on the local defaults already set — better than showing nothing.
@@ -289,9 +372,22 @@ class AppState extends ChangeNotifier {
     final newActive = !target.active;
     final updated = remoteConfig.campaigns.map((c) {
       if (c.id != campaignId) return c;
-      return Campaign(id: c.id, title: c.title, description: c.description, icon: c.icon, ctaLabel: c.ctaLabel, ctaLink: c.ctaLink, active: newActive);
+      // Real bug fixed here while already touching this line: this was dropping every field
+      // beyond the first six — youtubeVideoId, dates, cooldown override, and now the new Hall of
+      // Fame content too would have been silently wiped by any toggle. Only reachable via the
+      // unreachable Simulator screen currently, so not an active bug, but worth fixing properly
+      // rather than leaving a latent one for whenever Simulator might return.
+      return Campaign(
+        id: c.id, title: c.title, description: c.description, icon: c.icon, ctaLabel: c.ctaLabel, ctaLink: c.ctaLink, active: newActive,
+        youtubeVideoId: c.youtubeVideoId, startDate: c.startDate, endDate: c.endDate, cooldownMinutesOverride: c.cooldownMinutesOverride,
+        hofBadgeName: c.hofBadgeName, hofBadgeIcon: c.hofBadgeIcon, hofStickerName: c.hofStickerName, hofStickerIcon: c.hofStickerIcon, hofYoutubeVideoId: c.hofYoutubeVideoId,
+        defaultVehicleIcon: c.defaultVehicleIcon,
+        roadmapBgColor1: c.roadmapBgColor1, roadmapBgColor2: c.roadmapBgColor2, roadmapRoadColor: c.roadmapRoadColor,
+        termsAndConditions: c.termsAndConditions,
+        teaserActive: c.teaserActive, teaserDescription: c.teaserDescription,
+      );
     }).toList();
-    remoteConfig = RemoteConfig(townVoice: remoteConfig.townVoice, campaigns: updated);
+    remoteConfig = RemoteConfig(townVoice: remoteConfig.townVoice, campaigns: updated, weeklyLeaderboardActive: remoteConfig.weeklyLeaderboardActive);
     notifyListeners();
 
     try {
@@ -317,9 +413,82 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  void setWallpaperSwatch(int index) {
+  // Real bug fixed here: this only ever updated local memory, despite wallpaper_swatch_index
+  // already existing as a real column on profiles — the database had the right place for this
+  // the whole time, the app just never actually wrote to it. Confirmed the same gap exists for
+  // soundEnabled too (same unused-column pattern) — not touched here since it wasn't the
+  // specific report, but worth knowing it likely has the identical "resets on restart" issue.
+  Future<void> setWallpaperSwatch(int index) async {
     wallpaperSwatchIndex = index;
     notifyListeners();
+    try {
+      final uid = Supabase.instance.client.auth.currentUser?.id;
+      if (uid != null) {
+        await Supabase.instance.client.from('profiles').update({'wallpaper_swatch_index': index}).eq('id', uid);
+      }
+    } catch (_) {
+      // Local state already updated either way — a save failure here just means it won't
+      // survive a restart this one time, not that the current session is affected.
+    }
+  }
+
+  // New — equips a real, owned skin, shown on the roadmap. Verifies ownership before saving,
+  // rather than trusting whatever the UI happens to show — a defensive check, not just relying
+  // on the Skins screen to only ever offer owned skins as an option.
+  // Real, confirmed final version — genuinely global equip now, replacing the per-campaign
+  // system entirely. Removes the diagnostic banner/debug fields too, since the real cause
+  // (equipping being scoped per-campaign at all) is now understood and fixed at the design
+  // level, not just patched around.
+  Future<String?> equipSkin(String skinId, String skinIcon) async {
+    try {
+      final uid = Supabase.instance.client.auth.currentUser?.id;
+      if (uid == null) return 'Not signed in.';
+      final owned = await Supabase.instance.client.from('user_vehicle_skins').select('skin_id').eq('user_id', uid).eq('skin_id', skinId).maybeSingle();
+      if (owned == null) return "You don't own this skin.";
+      await Supabase.instance.client.from('profiles').update({'active_skin_id': skinId}).eq('id', uid);
+      equippedSkinId = skinId;
+      equippedSkinIcon = skinIcon;
+      notifyListeners();
+      return null;
+    } catch (e) {
+      return 'Could not equip this skin: ${e.toString()}';
+    }
+  }
+
+  Future<String?> unequipSkin() async {
+    try {
+      final uid = Supabase.instance.client.auth.currentUser?.id;
+      if (uid == null) return 'Not signed in.';
+      await Supabase.instance.client.from('profiles').update({'active_skin_id': null}).eq('id', uid);
+      equippedSkinId = null;
+      equippedSkinIcon = null;
+      notifyListeners();
+      return null;
+    } catch (e) {
+      return 'Could not unequip: ${e.toString()}';
+    }
+  }
+
+  Future<void> loadEquippedSkin() async {
+    try {
+      final uid = Supabase.instance.client.auth.currentUser?.id;
+      if (uid == null) return;
+      final row = await Supabase.instance.client
+          .from('profiles')
+          .select('active_skin_id, vehicle_skins(icon)')
+          .eq('id', uid)
+          .maybeSingle();
+      // Handled defensively for both possible relationship shapes — confirmed elsewhere in this
+      // project that PostgREST can return a nested to-one relationship as either a direct object
+      // or a single-item list depending on context.
+      final rawSkin = row?['vehicle_skins'];
+      final skin = rawSkin is List ? (rawSkin.isNotEmpty ? rawSkin.first as Map<String, dynamic> : null) : rawSkin as Map<String, dynamic>?;
+      equippedSkinId = row?['active_skin_id'] as String?;
+      equippedSkinIcon = skin?['icon'] as String?;
+      notifyListeners();
+    } catch (_) {
+      // Falls back to nothing equipped shown — never blocks the rest of the app over this.
+    }
   }
 
   // Friends — seeded with mock data as a fallback before real friendships load. Mock ids given
@@ -370,6 +539,58 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  // Real bug fixed here: Leaderboard and rank-dependent badges (Top 10, Top 3) were comparing
+  // against otherUsers — a hardcoded mock rival dataset — despite the real database being
+  // fully readable for this (profiles is public-select, no new RLS needed). Real data now,
+  // loaded fresh whenever the leaderboard is opened.
+  List<RealLeaderboardEntry> realLeaderboard = [];
+  List<RealLeaderboardEntry> weeklyLeaderboard = [];
+
+  Future<void> loadLeaderboard() async {
+    try {
+      final profileRows = await Supabase.instance.client.from('profiles_public').select('id, name, city, points').order('points', ascending: false);
+      final badgeRows = await Supabase.instance.client.from('user_badges').select('user_id');
+      final badgeCounts = <String, int>{};
+      for (final b in badgeRows) {
+        final uid = b['user_id'] as String;
+        badgeCounts[uid] = (badgeCounts[uid] ?? 0) + 1;
+      }
+      realLeaderboard = profileRows.map<RealLeaderboardEntry>((r) => RealLeaderboardEntry(
+            id: r['id'] as String,
+            name: r['name'] as String? ?? 'User',
+            city: r['city'] as String? ?? '',
+            points: r['points'] as int? ?? 0,
+            badgeCount: badgeCounts[r['id']] ?? 0,
+          )).toList();
+
+      // Real weekly data now — was the mock-duplicate-of-All-Time placeholder before. Reuses
+      // the same RealLeaderboardEntry model; badgeCount doesn't have a clean per-week meaning,
+      // left at 0 for these entries (only affects which tier icon shows next to weekly rows).
+      final weeklyRows = await Supabase.instance.client.from('weekly_leaderboard').select().order('weekly_points', ascending: false);
+      weeklyLeaderboard = weeklyRows.map<RealLeaderboardEntry>((r) => RealLeaderboardEntry(
+            id: r['user_id'] as String,
+            name: r['name'] as String? ?? 'User',
+            city: r['city'] as String? ?? '',
+            points: r['weekly_points'] as int? ?? 0,
+            badgeCount: 0,
+          )).toList();
+      notifyListeners();
+    } catch (_) {
+      // Leaderboard just won't reflect real data until the next successful load — doesn't block
+      // anything else.
+    }
+  }
+
+  // Shared by badges.dart's Top 10/Top 3 checks and every screen that shows "you're ranked #X" —
+  // one real source of truth now instead of three separate local copies each computing it their
+  // own way.
+  int get myRank {
+    final uid = Supabase.instance.client.auth.currentUser?.id;
+    final otherPoints = realLeaderboard.where((e) => e.id != uid).map((e) => e.points).toList();
+    final all = [...otherPoints, user.points]..sort((a, b) => b.compareTo(a));
+    return all.indexOf(user.points) + 1;
+  }
+
   // assigned_deeds — was entirely local mock data, never connected. Two foreign keys to
   // profiles here too (assigner_id, assignee_id), same ambiguity risk as friendships/feedback —
   // fetched separately per direction and joined in Dart rather than an embedded select, for the
@@ -386,7 +607,7 @@ class AppState extends ChangeNotifier {
 
       var namesById = <String, String>{};
       if (otherIds.isNotEmpty) {
-        final profiles = await Supabase.instance.client.from('profiles').select('id, name').inFilter('id', otherIds);
+        final profiles = await Supabase.instance.client.from('profiles_public').select('id, name').inFilter('id', otherIds);
         namesById = {for (final p in profiles) p['id'] as String: p['name'] as String? ?? 'Friend'};
       }
 
@@ -494,7 +715,7 @@ class AppState extends ChangeNotifier {
       await Supabase.instance.client.from('invite_codes').update({'used': true, 'used_by': uid}).eq('code', token);
       await Supabase.instance.client.from('friendships').insert({'requester_id': uid, 'addressee_id': issuerId, 'status': 'approved'});
 
-      final issuerProfile = await Supabase.instance.client.from('profiles').select('name').eq('id', issuerId).limit(1);
+      final issuerProfile = await Supabase.instance.client.from('profiles_public').select('name').eq('id', issuerId).limit(1);
       final issuerName = issuerProfile.isNotEmpty ? issuerProfile.first['name'] as String? ?? 'Friend' : 'Friend';
       friends.add(FriendEntry(id: issuerId, name: issuerName));
       notifyListeners();
@@ -553,13 +774,54 @@ class AppState extends ChangeNotifier {
     return cooldownDuration;
   }
 
+  // New — the global side of the dual cooldown system: 15 minutes across ALL deed types after
+  // ANY submission, layered on top of the existing per-type 1-hour cooldown. A type is locked if
+  // EITHER condition says so. Same campaign-override mechanism as the per-type cooldown, per the
+  // explicit direction that campaigns should affect both the same way — worth knowing this means
+  // a campaign override longer than 15 minutes would technically make the global cooldown
+  // LONGER than normal, not shorter; a reasonable edge case to just document rather than guard
+  // against, since campaigns are expected to only ever set short override values in practice.
+  Duration get effectiveGlobalCooldownDuration {
+    final overrideMinutes = remoteConfig.activeCooldownOverrideMinutes;
+    if (overrideMinutes != null) return Duration(minutes: overrideMinutes);
+    return const Duration(minutes: 15);
+  }
+
+  // Most recent submission across ALL deed types — derived from lastLoggedAt rather than a
+  // separately-tracked field, so there's nothing extra to keep in sync or reset on sign-out.
+  DateTime? get _lastAnyDeedSubmission {
+    if (lastLoggedAt.isEmpty) return null;
+    return lastLoggedAt.values.reduce((a, b) => a.isAfter(b) ? a : b);
+  }
+
+  // New — public, so Home can distinguish "everything is locked because of the shared global
+  // cooldown" from the normal per-type progress state, and show a clearer, deliberately greyed
+  // treatment instead of relying on the same progress-ring visual used for ordinary cooldowns —
+  // avoids the confusion of every category ring suddenly looking "full" for a reason that isn't
+  // obvious from the ring alone.
+  bool get isGlobalCooldownActive {
+    final lastAny = _lastAnyDeedSubmission;
+    if (lastAny == null) return false;
+    return _clampToZero(effectiveGlobalCooldownDuration - DateTime.now().difference(lastAny)) > Duration.zero;
+  }
+
   Duration cooldownRemaining(String type) {
     final last = lastLoggedAt[type];
-    if (last == null) return Duration.zero;
-    final elapsed = DateTime.now().difference(last);
-    final remaining = effectiveCooldownDuration - elapsed;
-    return remaining.isNegative ? Duration.zero : remaining;
+    final perTypeRemaining = last == null
+        ? Duration.zero
+        : _clampToZero(effectiveCooldownDuration - DateTime.now().difference(last));
+
+    final lastAny = _lastAnyDeedSubmission;
+    final globalRemaining = lastAny == null
+        ? Duration.zero
+        : _clampToZero(effectiveGlobalCooldownDuration - DateTime.now().difference(lastAny));
+
+    // A type is locked by whichever cooldown is stricter right now — its own per-type window,
+    // or the shared global window from any recent submission at all.
+    return perTypeRemaining > globalRemaining ? perTypeRemaining : globalRemaining;
   }
+
+  Duration _clampToZero(Duration d) => d.isNegative ? Duration.zero : d;
 
   // TEMPORARY testing helper — simulates simDay advancing (used by the Simulator's "Next Day" /
   // "Next Week" buttons). Cooldowns are real-wall-clock-based (cooldownRemaining above), which
@@ -581,24 +843,24 @@ class AppState extends ChangeNotifier {
     return deedsLog.where((d) => d.type == type && d.createdAt.year == now.year && d.createdAt.month == now.month && d.createdAt.day == now.day).length;
   }
 
-  // Whoever currently has the most points, across you + the mock rival accounts. NOTE: this is
-  // an honest interim placeholder — the real design (agreed separately) is a rolling Mon–Sun
-  // calendar-week window, not lifetime points. Real weekly tracking needs actual timestamps on
-  // deedsLog entries (currently just a `day` counter, not a real date), which is a data-model
-  // change beyond this pass. Flagging clearly rather than silently pretending this is final.
+  // Real bug fixed here: this compared against otherUsers (mock rival accounts), same root
+  // cause already fixed for Leaderboard. Now uses the same real data source (realLeaderboard)
+  // as Leaderboard/myRank — one real source of truth for "who's currently ahead" instead of
+  // three separate mock-dependent versions across the app.
+  //
+  // Still a real, honest limitation worth knowing: this is lifetime points, not a genuine
+  // Mon–Sun weekly window (the actual agreed design). deedsLog does have real timestamps now
+  // (from the milestone-fix batch), so building a true weekly window is realistic to do later —
+  // just not built in this pass, flagged clearly rather than silently pretending this is final.
   (String name, int points) get townVoiceLeader {
-    final entries = <String, int>{user.name: user.points};
-    for (final o in otherUsers) {
-      entries[o.name] = o.points;
-    }
     var leaderName = user.name;
-    var leaderPoints = -1;
-    entries.forEach((name, pts) {
-      if (pts > leaderPoints) {
-        leaderPoints = pts;
-        leaderName = name;
+    var leaderPoints = user.points;
+    for (final e in realLeaderboard) {
+      if (e.points > leaderPoints) {
+        leaderPoints = e.points;
+        leaderName = e.name;
       }
-    });
+    }
     return (leaderName, leaderPoints);
   }
 
@@ -631,23 +893,25 @@ class AppState extends ChangeNotifier {
 
   // DATA — checks whether today's crossed into a new 3/5/7-deed milestone since it was last
   // acknowledged. Only approved (not pending/flagged) deeds count, matching the original exactly.
+  // Real regression fixed here: the previous version tracked "already celebrated today" in
+  // dailyMilestonesHit — purely in-memory state that reset on every app restart. So reopening
+  // the app after hitting 3 forgot that 3 was already celebrated, and both 3 and 5 fired
+  // together on the next submission that crossed 5. This version needs no persisted flag at
+  // all: it just checks whether THIS SPECIFIC submission crossed a threshold, by comparing the
+  // real count immediately before vs. after. Nothing to desync, because there's nothing being
+  // remembered between sessions in the first place.
   List<int> _checkDailyMilestones() {
-    if (dailyMilestoneDay != simDay) {
-      dailyMilestoneDay = simDay;
-      dailyMilestonesHit = {};
-    }
-    // Now counts pending deeds too, not just approved — matching "the requests were denied but
-    // the animation comes through" (same "regardless" principle already used for the thank-you
-    // animation). The deed genuinely happened the moment it was submitted; whether a moderator
-    // later approves or rejects it is a separate question from whether it counts toward today's
-    // milestone streak.
-    final countToday = deedsLog.where((d) => d.day == simDay && (d.status == 'approved' || d.status == 'pending')).length;
+    final now = DateTime.now();
+    final countAfter = deedsLog.where((d) {
+      final c = d.createdAt;
+      return c.year == now.year && c.month == now.month && c.day == now.day && (d.status == 'approved' || d.status == 'pending');
+    }).length;
+    final countBefore = countAfter - 1; // this submission is what just brought the count to countAfter
     final newlyHit = <int>[];
     for (final t in [3, 5, 7]) {
-      if (countToday >= t && !dailyMilestonesHit.contains(t)) {
-        dailyMilestonesHit.add(t); // still marked as reached internally either way — the deeds
-        // genuinely happened — but the animation itself is gendered (شہزادہ/شہزادی), so it's
-        // skipped for anyone who hasn't specified male or female, rather than defaulting one way.
+      if (countBefore < t && countAfter >= t) {
+        // The animation itself is gendered (شہزادہ/شہزادی), so it's skipped for anyone who
+        // hasn't specified male or female, rather than defaulting one way — same rule as before.
         if (t == 7 && user.gender != 'male' && user.gender != 'female') continue;
         newlyHit.add(t);
       }
@@ -679,9 +943,27 @@ class AppState extends ChangeNotifier {
     }
   }
 
-  Future<SubmitResult> submitPhotoDeed(String type, Map<String, String> details, {File? photoFile}) async {
+  Future<SubmitResult> submitPhotoDeed(String type, Map<String, String> details, {File? photoFile, String? campaignId}) async {
     final meta = deedCatalog[type];
     if (meta == null) return SubmitResult(flagged: false, leveledUpTier: null, newMilestones: []);
+
+    // Real fix here: a genuine, confirmed case where briefly toggling a campaign active (even
+    // for a moment) could leave its shortened cooldown override lingering for anyone whose app
+    // was already open at that exact moment — since remoteConfig only otherwise refreshes on
+    // cold start or app resume, not right before this actually matters. Re-fetched here, right
+    // before the real cooldown check, so this always uses genuinely current campaign state
+    // rather than whatever was cached from an earlier point in the session.
+    await loadRemoteConfig();
+
+    // Real bug fixed here: this never actually checked cooldown at all — every bit of
+    // enforcement lived purely in the UI (greyed-out, disabled tiles). That's exactly the kind
+    // of gap that lets submission through if ANY path reaches this function without the UI's
+    // own check having caught it first — confirmed happening via the submit modal specifically.
+    // Real safeguard now lives here too, at the data layer, checked before any actual work
+    // (GPS, photo upload) happens — not just relying on the UI to have gotten it right.
+    if (cooldownRemaining(type) > Duration.zero) {
+      return SubmitResult(flagged: false, leveledUpTier: null, newMilestones: [], blockedByCooldown: true);
+    }
 
     final position = await _attemptGpsCapture();
     final gpsFailed = position == null;
@@ -719,6 +1001,7 @@ class AppState extends ChangeNotifier {
             'photo_url': photoPath,
             'gps_lat': position?.latitude,
             'gps_lng': position?.longitude,
+            'campaign_id': campaignId,
           }).select().single();
           deedId = inserted['id'] as String?;
           if (deedId != null) {
@@ -743,7 +1026,7 @@ class AppState extends ChangeNotifier {
         evidence: evidence.isEmpty ? null : evidence,
         gps: position != null ? '${position.latitude.toStringAsFixed(4)}, ${position.longitude.toStringAsFixed(4)}' : null,
       ));
-      deedsLog.add(DeedLogEntry(id: deedId, type: type, points: awardedPoints, day: simDay, createdAt: DateTime.now(), status: 'pending'));
+      deedsLog.add(DeedLogEntry(id: deedId, type: type, points: awardedPoints, day: simDay, createdAt: DateTime.now(), status: 'pending', campaignId: campaignId));
       // Milestones now count pending submissions too, matching "give a thank you regardless" —
       // previously this only ran in the approved branch below, so a flagged submission never
       // moved the daily-milestone counter at all, even though the deed genuinely happened.
@@ -763,6 +1046,7 @@ class AppState extends ChangeNotifier {
           'photo_url': photoPath,
           'gps_lat': position?.latitude,
           'gps_lng': position?.longitude,
+          'campaign_id': campaignId,
         }).select().single();
         deedId = inserted['id'] as String?;
         // Real points update — was purely local before. Same "don't block on network" reasoning
@@ -777,7 +1061,7 @@ class AppState extends ChangeNotifier {
       }
     }
 
-    deedsLog.add(DeedLogEntry(id: deedId, type: type, points: awardedPoints, day: simDay, createdAt: DateTime.now(), status: 'approved'));
+    deedsLog.add(DeedLogEntry(id: deedId, type: type, points: awardedPoints, day: simDay, createdAt: DateTime.now(), status: 'approved', campaignId: campaignId));
     user.points += awardedPoints;
     if (user.lastLogDay != simDay) {
       user.streak += 1;
@@ -797,6 +1081,11 @@ class AppState extends ChangeNotifier {
   TierDef? _applyBadgeUpdate() {
     if (computeRank(this, otherUsers) == 1) everRankedFirst = true;
     final oldBadges = user.badges.toSet();
+    // Real fix here, reverted: freeze/unfreeze is already handled entirely at the database
+    // level (app_config.badges_frozen + an RLS check on user_badges' insert policy) — the app
+    // was never meant to know this exists at all, it just tries to write and the database
+    // silently allows or refuses depending on the flag. No client-side filtering needed or
+    // wanted here.
     user.badges = badgeDefs.where((b) => b.check(this, otherUsers)).map((b) => b.id).toList();
     final newlyUnlocked = user.badges.where((id) => !oldBadges.contains(id)).toList();
     if (newlyUnlocked.isNotEmpty) _writeNewBadges(newlyUnlocked);
@@ -937,7 +1226,10 @@ class AppState extends ChangeNotifier {
     // happened at submission time, only its status is changing now. Same reasoning just applied
     // to rejectQueueItem below.
     final originalCreatedAt = idx != -1 ? deedsLog[idx].createdAt : DateTime.now();
-    final approved = DeedLogEntry(id: id, type: item.type, points: item.points, day: simDay, createdAt: originalCreatedAt, status: 'approved');
+    final originalCampaignId = idx != -1 ? deedsLog[idx].campaignId : null; // preserved through
+    // approval too — a campaign-tagged deed shouldn't lose that tag just because a moderator
+    // acted on it
+    final approved = DeedLogEntry(id: id, type: item.type, points: item.points, day: simDay, createdAt: originalCreatedAt, status: 'approved', campaignId: originalCampaignId);
     if (idx != -1) {
       deedsLog[idx] = approved;
     } else {
@@ -992,7 +1284,7 @@ class AppState extends ChangeNotifier {
     final idx = deedsLog.indexWhere((d) => d.id == id);
     if (idx != -1) {
       final old = deedsLog[idx];
-      deedsLog[idx] = DeedLogEntry(id: old.id, type: old.type, points: old.points, day: old.day, createdAt: old.createdAt, status: 'rejected');
+      deedsLog[idx] = DeedLogEntry(id: old.id, type: old.type, points: old.points, day: old.day, createdAt: old.createdAt, status: 'rejected', campaignId: old.campaignId);
     }
 
     String? errorMessage;
@@ -1029,6 +1321,11 @@ class AppState extends ChangeNotifier {
     user.city = city;
     user.phone = phone;
     user.avatarFile = avatarFile;
+    // Real bug fixed here: email was never captured at signup at all — there's no email field
+    // on Profile Setup (correctly, since it's already known from the OTP-authenticated session),
+    // but nothing ever auto-filled it into the profile either. Auto-populated from the real
+    // session now, so it's captured from day one instead of staying blank until manually typed.
+    user.email = Supabase.instance.client.auth.currentUser?.email;
     notifyListeners();
   }
 
@@ -1045,6 +1342,7 @@ class AppState extends ChangeNotifier {
   // since none of this was ever being cleared on its own.
   void resetLocalState() {
     user = UserProfile();
+    membershipNumber = null;
     deedsLog = [];
     moderationQueue = [];
     lastLoggedAt = {};
@@ -1068,6 +1366,22 @@ class AppState extends ChangeNotifier {
     user.phone = row['phone'] as String?;
     user.city = row['city'] as String? ?? user.city;
     user.points = row['points'] as int? ?? 0;
+    // Real fix here — loads the real, saved wallpaper selection now, matching the new save
+    // logic in setWallpaperSwatch(). Without this, even a successful save would still look
+    // broken, since nothing would ever read it back on the next session.
+    wallpaperSwatchIndex = row['wallpaper_swatch_index'] as int? ?? wallpaperSwatchIndex;
+
+    // Global equip is loaded separately via loadEquippedSkin(), called at profile level.
+
+    // New — which campaigns this user has fully completed, for the Home tick mark. Loaded here
+    // (once, with everything else) rather than per-campaign-card, since Home shows all active
+    // campaigns at once and needs this for each of them.
+    try {
+      final completedRows = await Supabase.instance.client.from('hall_of_fame_claims').select('campaign_id').eq('user_id', uid);
+      completedCampaignIds = completedRows.map<String>((r) => r['campaign_id'] as String).toSet();
+    } catch (_) {
+      // Tick mark just won't show yet if this fails — doesn't block anything else.
+    }
 
     // Load real deed history too — was missing before, which meant a returning user's badges,
     // cooldowns, and daily-milestone progress would all silently reset to nothing every time
@@ -1094,6 +1408,7 @@ class AppState extends ChangeNotifier {
           day: 0,
           createdAt: createdAt,
           status: d['status'] as String,
+          campaignId: d['campaign_id'] as String?,
         );
       }).toList();
 
@@ -1128,6 +1443,18 @@ class AppState extends ChangeNotifier {
 
     // Real load now — was mock data this whole time, never connected.
     await _loadAssignedDeeds(uid);
+    // Real leaderboard data — needed before Home renders "you're ranked #X", since that now
+    // depends on this being loaded rather than a hardcoded mock list.
+    await loadLeaderboard();
+
+    // Real membership number fetch — table's RLS already guarantees this only ever returns
+    // your own row, regardless of what's queried.
+    try {
+      final rows = await Supabase.instance.client.from('membership_numbers').select('membership_number').eq('user_id', uid).limit(1);
+      membershipNumber = rows.isNotEmpty ? rows.first['membership_number'] as String? : null;
+    } catch (_) {
+      // Doesn't block sign-in — just won't show until the next successful load.
+    }
 
     // Feedback history too — was previously lost entirely on every app reopen, including any
     // moderator response that had already been given.
@@ -1153,7 +1480,7 @@ class AppState extends ChangeNotifier {
       final rows = await Supabase.instance.client.from('friendships').select().or('requester_id.eq.$uid,addressee_id.eq.$uid').eq('status', 'approved');
       final otherIds = rows.map<String>((r) => r['requester_id'] == uid ? r['addressee_id'] as String : r['requester_id'] as String).toList();
       if (otherIds.isNotEmpty) {
-        final otherProfiles = await Supabase.instance.client.from('profiles').select('id, name').inFilter('id', otherIds);
+        final otherProfiles = await Supabase.instance.client.from('profiles_public').select('id, name').inFilter('id', otherIds);
         friends = otherProfiles.map<FriendEntry>((p) => FriendEntry(id: p['id'] as String, name: p['name'] as String? ?? 'Friend')).toList();
       } else {
         friends = [];
@@ -1167,7 +1494,8 @@ class AppState extends ChangeNotifier {
     // and (separately) nothing could even write one, given the missing INSERT policy.
     try {
       final notifRows = await Supabase.instance.client.from('notifications').select().eq('user_id', uid).order('created_at', ascending: false);
-      notifications = notifRows.map<AppNotification>((n) => AppNotification(
+      final previousIds = notifications.map((n) => n.id).toSet();
+      final loaded = notifRows.map<AppNotification>((n) => AppNotification(
             id: n['id'] as String,
             type: n['type'] as String,
             title: n['title'] as String,
@@ -1175,6 +1503,18 @@ class AppState extends ChangeNotifier {
             day: simDay,
             read: n['read'] as bool? ?? false,
           )).toList();
+      // New — real system notification (with sound) for anything that's genuinely new since the
+      // last load, not just the in-app list updating silently. Guarded by previousIds being
+      // non-empty so this doesn't fire once for every notification the very first time someone
+      // ever loads their profile (which would just be existing history, not something new).
+      if (previousIds.isNotEmpty) {
+        for (final n in loaded) {
+          if (!previousIds.contains(n.id)) {
+            showLocalNotification(title: n.title, body: n.body);
+          }
+        }
+      }
+      notifications = loaded;
     } catch (_) {
       // Doesn't block sign-in — same reasoning as above.
     }
@@ -1185,19 +1525,29 @@ class AppState extends ChangeNotifier {
 
   // Called once, right after Profile Setup completes for a brand-new user — creates their row
   // in Supabase to match what completeSetup() just did locally.
-  Future<void> createProfileInSupabase() async {
+  // Real bug fixed here: this had no error handling at all. If this insert failed for any
+  // reason — a leftover row from an account that was only ever "requested" for deletion, not
+  // actually removed (Delete Account never auto-deletes, by design), a network issue, anything —
+  // the failure was completely silent. No error shown anywhere the person could see, the
+  // Continue button would just look enabled and do nothing when tapped. Real error surfaced now.
+  Future<String?> createProfileInSupabase() async {
     final uid = Supabase.instance.client.auth.currentUser?.id;
     final email = Supabase.instance.client.auth.currentUser?.email;
-    if (uid == null) return;
-    await Supabase.instance.client.from('profiles').insert({
-      'id': uid,
-      'name': user.name,
-      'email': email,
-      'phone': user.phone,
-      'city': user.city,
-      'gender': user.gender,
-      'dob': user.dob,
-    });
+    if (uid == null) return 'You need to be signed in to do this.';
+    try {
+      await Supabase.instance.client.from('profiles').insert({
+        'id': uid,
+        'name': user.name,
+        'email': email,
+        'phone': user.phone,
+        'city': user.city,
+        'gender': user.gender,
+        'dob': user.dob,
+      });
+      return null;
+    } catch (e) {
+      return 'Could not create your profile: ${e.toString()}';
+    }
   }
 
   // Ported from saveEditProfile() in the original — Photo/Name/Phone/Email only. Gender, DOB,
