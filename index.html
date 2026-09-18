@@ -4,6 +4,9 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Acha Karo — Do good. Get seen.</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Mirza:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
   :root {
     --bg: #071b11;
@@ -49,9 +52,9 @@
     max-width: 1080px;
     margin: 0 auto;
   }
-  .brand { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 18px; flex-shrink: 0; }
+  .brand { display: flex; align-items: center; gap: 12px; font-weight: 900; font-size: 26px; color: var(--gold); flex-shrink: 0; }
   .brand-badge {
-    width: 36px; height: 36px; border-radius: 10px;
+    width: 44px; height: 44px; border-radius: 12px;
     overflow: hidden; flex-shrink: 0;
   }
   .brand-badge img { width: 100%; height: 100%; object-fit: cover; display: block; }
@@ -104,22 +107,25 @@
   }
 
   .hero-mascot { position: relative; display: flex; justify-content: center; }
-  .hero-mascot img {
-    width: 260px; max-width: 80%; filter: drop-shadow(0 20px 40px rgba(0,0,0,0.45));
+  .hero-mascot img.main-visual {
+    width: 400px; max-width: 92%; filter: drop-shadow(0 24px 44px rgba(0,0,0,0.5));
   }
-  .speech-bubble {
+  @keyframes bounce-icon {
+    0%, 100% { transform: translateY(0) rotate(-4deg); }
+    50% { transform: translateY(-14px) rotate(4deg); }
+  }
+  .floating-logo {
     position: absolute;
-    top: 6%;
-    right: -6%;
-    background: var(--text);
-    color: var(--ink-on-gold);
-    font-weight: 700;
-    font-size: 13px;
-    padding: 10px 16px;
-    border-radius: 16px 16px 4px 16px;
-    box-shadow: 0 8px 20px rgba(0,0,0,0.3);
-    max-width: 170px;
+    top: -6%;
+    right: 8%;
+    width: 96px; height: 96px;
+    border-radius: 24px;
+    overflow: hidden;
+    box-shadow: 0 16px 30px rgba(0,0,0,0.5), 0 0 0 4px rgba(224,178,61,0.35);
+    animation: bounce-icon 2.6s ease-in-out infinite;
+    z-index: 3;
   }
+  .floating-logo img { width: 100%; height: 100%; object-fit: cover; display: block; }
 
   /* FEATURES */
   section { position: relative; z-index: 1; padding: 70px 24px; }
@@ -141,38 +147,6 @@
   .feature-card p { font-size: 12.5px; color: var(--text-soft); margin: 0; line-height: 1.5; }
   .cat-card { padding: 20px 12px; font-size: 13px; font-weight: 700; }
   .cat-card .icon { font-size: 26px; margin-bottom: 10px; }
-
-  /* MISSIONS / mascot showcase strip */
-  .missions {
-    background: var(--bg2);
-    border-top: 1px solid var(--line);
-    border-bottom: 1px solid var(--line);
-  }
-  .missions-grid {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 20px;
-    max-width: 1080px;
-    margin: 0 auto;
-  }
-  .mission-card {
-    background: var(--card-strong);
-    border: 1px solid var(--line);
-    border-radius: 22px;
-    padding: 24px 18px 18px;
-    text-align: center;
-    position: relative;
-    overflow: hidden;
-  }
-  .mission-card img { width: 132px; margin-bottom: 6px; filter: drop-shadow(0 10px 18px rgba(0,0,0,0.35)); }
-  .mission-card h4 { font-size: 14.5px; margin: 6px 0 4px; }
-  .mission-card p { font-size: 12px; color: var(--text-soft); margin: 0; line-height: 1.5; }
-  .mission-tag {
-    position: absolute; top: 14px; right: 14px;
-    background: rgba(224,178,61,0.16); color: var(--gold);
-    font-size: 10.5px; font-weight: 800; padding: 4px 10px; border-radius: 100px;
-    letter-spacing: 0.04em;
-  }
 
   /* DOWNLOAD */
   .download-panel {
@@ -235,22 +209,37 @@
     max-width: 1080px;
     margin: 0 auto;
     min-height: 260px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
   }
-  .sticker-band-text {
+  .guddi-bio-wrap {
     position: relative;
     z-index: 3;
-    text-align: center;
-    max-width: 460px;
-    background: rgba(7, 27, 17, 0.72);
-    backdrop-filter: blur(2px);
-    border-radius: 24px;
-    padding: 28px 30px;
+    max-width: 980px;
+    margin: 0 auto;
+    background: rgba(7, 27, 17, 0.8);
+    backdrop-filter: blur(3px);
+    border: 1px solid var(--line);
+    border-radius: 28px;
+    padding: 36px 34px;
   }
-  .sticker-band-text h2 { font-size: 26px; margin: 0 0 8px; }
-  .sticker-band-text p { color: var(--text-soft); font-size: 14px; margin: 0 0 18px; }
+  .bio-columns {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 30px;
+    margin-bottom: 32px;
+  }
+  .bio-col h3 { font-size: 20px; margin: 0 0 14px; color: var(--gold); }
+  .bio-col p { font-size: 14px; line-height: 1.75; color: var(--text-soft); margin: 0 0 14px; }
+  .bio-col p strong { color: var(--text); }
+  .bio-ur { font-family: 'Mirza', serif; text-align: right; }
+  .bio-ur h3, .bio-ur p { font-family: 'Mirza', serif; }
+  .bio-ur p { font-size: 19px; line-height: 2; }
+  .follow-everywhere {
+    text-align: center;
+    padding-top: 28px;
+    border-top: 1px solid var(--line);
+  }
+  .follow-everywhere h2 { font-size: 24px; margin: 0 0 8px; }
+  .follow-everywhere p { color: var(--text-soft); font-size: 14px; margin: 0 0 18px; }
   .social-row { display: flex; gap: 16px; justify-content: center; }
   .social-row a {
     color: var(--gold);
@@ -274,6 +263,8 @@
   .s5 { width: 76px; bottom: 30px; left: -2%; transform: rotate(-16deg); opacity: 0.6; }
   .s6 { width: 70px; top: -14px; right: 22%; transform: rotate(-8deg); opacity: 0.6; }
   .s7 { width: 78px; bottom: -24px; right: 30%; transform: rotate(14deg); opacity: 0.55; }
+  .s8 { width: 100px; top: 40%; left: -3%; transform: rotate(6deg) translateY(-50%); opacity: 0.5; }
+  .s9 { width: 96px; top: 42%; right: -3%; transform: rotate(-8deg) translateY(-50%); opacity: 0.5; }
 
   /* CONTACT */
   .contact-form {
@@ -311,7 +302,8 @@
 
   @media (max-width: 640px) {
     .sticker { display: none; }
-    .sticker-band-text { background: transparent; padding: 0; backdrop-filter: none; }
+    .guddi-bio-wrap { background: transparent; border: none; padding: 0; backdrop-filter: none; }
+    .bio-ur p { font-size: 17px; }
   }
 
   @media (max-width: 640px) {
@@ -339,12 +331,11 @@
     .hero p.lead { margin-left: auto; margin-right: auto; }
     .cta-row { justify-content: center; }
     .hero-mascot { order: -1; margin-bottom: 6px; }
-    .hero-mascot img { width: 200px; }
-    .speech-bubble { display: none; }
+    .hero-mascot img.main-visual { width: 280px; }
+    .floating-logo { width: 68px; height: 68px; border-radius: 18px; top: -4%; right: 10%; }
     .grid-4 { grid-template-columns: repeat(2, 1fr); gap: 14px; }
     .grid-5 { grid-template-columns: repeat(2, 1fr); gap: 12px; }
-    .missions-grid { grid-template-columns: 1fr; gap: 18px; }
-    .mission-card img { width: 110px; }
+    .bio-columns { grid-template-columns: 1fr !important; }
     .download-panel { grid-template-columns: 1fr; padding: 26px 22px; }
     .download-panel .corner-mascot { position: static; width: 120px; margin: 16px auto 0; opacity: 1; }
     .steps li { font-size: 13px; }
@@ -379,8 +370,8 @@
       </div>
     </div>
     <div class="hero-mascot">
-      <img src="assets/guddi-crossed-arms.png" alt="Guddi, the Acha Karo mascot" />
-      <div class="speech-bubble">Let's Acha Karo together! 🌱</div>
+      <div class="floating-logo"><img src="assets/logo.jpg" alt="Acha Karo app icon" /></div>
+      <img class="main-visual" src="assets/guddi-action-phone.png" alt="Guddi, the Acha Karo mascot, holding up the app" />
     </div>
   </div>
 </section>
@@ -430,61 +421,51 @@
   </div>
 </section>
 
-<section class="missions" id="guddi">
-  <div class="section-head">
-    <h2>Meet Guddi</h2>
-    <p>She shows up for Pakistan in every uniform — on the ground, at sea, and in the sky.<br>Now it's your turn to show up for your street.</p>
-  </div>
-  <div class="missions-grid">
-    <div class="mission-card">
-      <span class="mission-tag">OFF DUTY</span>
-      <img src="assets/guddi-wink.png" alt="Guddi, everyday" style="width:132px; margin-bottom:6px; border-radius:16px;" />
-      <h4>Guddi, Everyday</h4>
-      <p>Same girl, no uniform — just someone who decided to do something good today.</p>
-    </div>
-    <div class="mission-card">
-      <span class="mission-tag">PAF</span>
-      <img src="assets/paf-sticker.png" alt="Guddi in Pakistan Air Force uniform" />
-      <h4>Guddi, Pakistan Air Force</h4>
-      <p>Sharp-eyed and always ready — just like you spotting a good deed to do.</p>
-    </div>
-    <div class="mission-card">
-      <span class="mission-tag">NAVY</span>
-      <img src="assets/navy-sticker.png" alt="Guddi in Pakistan Navy uniform" />
-      <h4>Guddi, Pakistan Navy</h4>
-      <p>Steady and dependable — the same energy she brings to every good cause.</p>
-    </div>
-    <div class="mission-card">
-      <span class="mission-tag">ARMY</span>
-      <img src="assets/army-sticker.png" alt="Guddi in Pakistan Army uniform" />
-      <h4>Guddi, Pakistan Army</h4>
-      <p>Disciplined and dedicated — showing up for the community, every single day.</p>
-    </div>
-  </div>
-</section>
-
-<section class="sticker-band">
+<section class="sticker-band" id="guddi">
   <div class="sticker-band-inner">
     <img src="assets/paf-icon.png" alt="" class="sticker s1" />
     <img src="assets/navy-sticker.png" alt="" class="sticker s2" />
     <img src="assets/army-icon.png" alt="" class="sticker s3" />
-    <img src="assets/guddi-action-phone.png" alt="" class="sticker s4" />
     <img src="assets/paf-sticker.png" alt="" class="sticker s5" />
     <img src="assets/navy-icon.png" alt="" class="sticker s6" />
     <img src="assets/army-sticker.png" alt="" class="sticker s7" />
-    <div class="sticker-band-text">
-      <h2>Follow Guddi everywhere</h2>
-      <p>Reels, uniforms, good deeds — she shows up in all of it. Come say hi.</p>
-      <div class="social-row">
-        <a href="https://www.instagram.com/acha.karo.pk" target="_blank" rel="noopener" aria-label="Instagram">
-          <svg viewBox="0 0 448 512" width="26" height="26" fill="currentColor"><path d="M224.1 141c-63.6 0-114.9 51.3-114.9 114.9s51.3 114.9 114.9 114.9S339 319.5 339 255.9 287.7 141 224.1 141zm0 189.6c-41.1 0-74.7-33.5-74.7-74.7s33.5-74.7 74.7-74.7 74.7 33.5 74.7 74.7-33.6 74.7-74.7 74.7zm146.4-194.3c0 14.9-12 26.8-26.8 26.8-14.9 0-26.8-12-26.8-26.8s12-26.8 26.8-26.8 26.8 12 26.8 26.8zm76.1 27.2c-1.7-35.9-9.9-67.7-36.2-93.9-26.2-26.2-58-34.4-93.9-36.2-37-2.1-147.9-2.1-184.9 0-35.8 1.7-67.6 9.9-93.9 36.1s-34.4 58-36.2 93.9c-2.1 37-2.1 147.9 0 184.9 1.7 35.9 9.9 67.7 36.2 93.9s58 34.4 93.9 36.2c37 2.1 147.9 2.1 184.9 0 35.9-1.7 67.7-9.9 93.9-36.2 26.2-26.2 34.4-58 36.2-93.9 2.1-37 2.1-147.8 0-184.8zM398.8 388c-7.8 19.6-22.9 34.7-42.6 42.6-29.5 11.7-99.5 9-132.1 9s-102.7 2.6-132.1-9c-19.6-7.8-34.7-22.9-42.6-42.6-11.7-29.5-9-99.5-9-132.1s-2.6-102.7 9-132.1c7.8-19.6 22.9-34.7 42.6-42.6 29.5-11.7 99.5-9 132.1-9s102.7-2.6 132.1 9c19.6 7.8 34.7 22.9 42.6 42.6 11.7 29.5 9 99.5 9 132.1s2.7 102.7-9 132.1z"/></svg>
-        </a>
-        <a href="https://youtube.com/@achakaropk" target="_blank" rel="noopener" aria-label="YouTube">
-          <svg viewBox="0 0 576 512" width="28" height="28" fill="currentColor"><path d="M549.7 124.1c-6.3-23.7-24.8-42.3-48.3-48.6C458.8 64 288 64 288 64S117.2 64 74.6 75.5c-23.5 6.3-42 24.9-48.3 48.6-11.4 42.9-11.4 132.3-11.4 132.3s0 89.4 11.4 132.3c6.3 23.7 24.8 41.5 48.3 47.8C117.2 448 288 448 288 448s170.8 0 213.4-11.5c23.5-6.3 42-24.1 48.3-47.8 11.4-42.9 11.4-132.3 11.4-132.3s0-89.4-11.4-132.3zm-317.5 213.5V175.2l142.7 81.2-142.7 81.2z"/></svg>
-        </a>
-        <a href="https://www.tiktok.com/@acha.karo.pk" target="_blank" rel="noopener" aria-label="TikTok">
-          <svg viewBox="0 0 448 512" width="24" height="24" fill="currentColor"><path d="M448,209.91a210.06,210.06,0,0,1-122.77-39.25V349.38A162.55,162.55,0,1,1,185,188.31V278.2a74.62,74.62,0,1,0,52.23,71.18V0l88,0a121.18,121.18,0,0,0,1.86,22.17h0A122.18,122.18,0,0,0,381,102.39a121.43,121.43,0,0,0,67,20.14Z"/></svg>
-        </a>
+    <img src="assets/guddi-wink.png" alt="" class="sticker s8" />
+    <img src="assets/guddi-crossed-arms.png" alt="" class="sticker s9" />
+
+    <div class="guddi-bio-wrap">
+      <div class="bio-columns">
+        <div class="bio-col bio-en">
+          <h3>Meet Guddi 🇵🇰</h3>
+          <p>Guddi is the face of Acha Karo — curious, mischievous, sometimes scared, and always learning.</p>
+          <p>She wasn't always someone who stopped to help. She started out doing ordinary things, making mistakes, and learning along the way. Then she discovered that doing good can be an adventure too.</p>
+          <p>Through Guddi's journey, you'll see her explore Pakistan, discover its stories, take on challenges, help others, and learn that making a difference doesn't always require something big.</p>
+          <p><strong>You don't have to be perfect. You just have to start.</strong></p>
+          <p>Follow Guddi. Take on the challenges.<br>Do good. Have fun. Make Pakistan better. 🇵🇰</p>
+        </div>
+        <div class="bio-col bio-ur" dir="rtl" lang="ur">
+          <h3>گڈی سے ملیے 🇵🇰</h3>
+          <p>گڈی اچھا کرو کا چہرہ ہے — تجسس سے بھرپور، شرارتی، کبھی کبھی ڈر جانے والی، لیکن ہر دن کچھ نیا سیکھنے والی۔</p>
+          <p>گڈی ہمیشہ سے ایسی نہیں تھی کہ رک کر کسی کی مدد کرے۔ وہ بھی عام سی باتوں سے شروع ہوئی، غلطیاں کیں اور راستے میں سیکھتی گئی۔ پھر اسے احساس ہوا کہ اچھا کرنا بھی ایک ایڈونچر ہو سکتا ہے۔</p>
+          <p>گڈی کے سفر میں آپ اسے پاکستان کو دریافت کرتے، نئی کہانیاں جانتے، چیلنجز پورے کرتے، دوسروں کی مدد کرتے اور یہ سیکھتے دیکھیں گے کہ فرق پیدا کرنے کے لیے ہمیشہ کوئی بہت بڑا کام کرنا ضروری نہیں ہوتا۔</p>
+          <p><strong>آپ کو پرفیکٹ ہونے کی ضرورت نہیں۔ بس شروعات کرنے کی ضرورت ہے۔</strong></p>
+          <p>گڈی کے سفر کا حصہ بنیں۔ چیلنجز پورے کریں۔<br>اچھا کرو۔ مزے کرو۔ پاکستان کو بہتر بناؤ۔ 🇵🇰</p>
+        </div>
+      </div>
+
+      <div class="follow-everywhere">
+        <h2>Follow Guddi everywhere</h2>
+        <p>Reels, uniforms, good deeds — she shows up in all of it. Come say hi.</p>
+        <div class="social-row">
+          <a href="https://www.instagram.com/acha.karo.pk" target="_blank" rel="noopener" aria-label="Instagram">
+            <svg viewBox="0 0 448 512" width="26" height="26" fill="currentColor"><path d="M224.1 141c-63.6 0-114.9 51.3-114.9 114.9s51.3 114.9 114.9 114.9S339 319.5 339 255.9 287.7 141 224.1 141zm0 189.6c-41.1 0-74.7-33.5-74.7-74.7s33.5-74.7 74.7-74.7 74.7 33.5 74.7 74.7-33.6 74.7-74.7 74.7zm146.4-194.3c0 14.9-12 26.8-26.8 26.8-14.9 0-26.8-12-26.8-26.8s12-26.8 26.8-26.8 26.8 12 26.8 26.8zm76.1 27.2c-1.7-35.9-9.9-67.7-36.2-93.9-26.2-26.2-58-34.4-93.9-36.2-37-2.1-147.9-2.1-184.9 0-35.8 1.7-67.6 9.9-93.9 36.1s-34.4 58-36.2 93.9c-2.1 37-2.1 147.9 0 184.9 1.7 35.9 9.9 67.7 36.2 93.9s58 34.4 93.9 36.2c37 2.1 147.9 2.1 184.9 0 35.9-1.7 67.7-9.9 93.9-36.2 26.2-26.2 34.4-58 36.2-93.9 2.1-37 2.1-147.8 0-184.8zM398.8 388c-7.8 19.6-22.9 34.7-42.6 42.6-29.5 11.7-99.5 9-132.1 9s-102.7 2.6-132.1-9c-19.6-7.8-34.7-22.9-42.6-42.6-11.7-29.5-9-99.5-9-132.1s-2.6-102.7 9-132.1c7.8-19.6 22.9-34.7 42.6-42.6 29.5-11.7 99.5-9 132.1-9s102.7-2.6 132.1 9c19.6 7.8 34.7 22.9 42.6 42.6 11.7 29.5 9 99.5 9 132.1s2.7 102.7-9 132.1z"/></svg>
+          </a>
+          <a href="https://youtube.com/@achakaropk" target="_blank" rel="noopener" aria-label="YouTube">
+            <svg viewBox="0 0 576 512" width="28" height="28" fill="currentColor"><path d="M549.7 124.1c-6.3-23.7-24.8-42.3-48.3-48.6C458.8 64 288 64 288 64S117.2 64 74.6 75.5c-23.5 6.3-42 24.9-48.3 48.6-11.4 42.9-11.4 132.3-11.4 132.3s0 89.4 11.4 132.3c6.3 23.7 24.8 41.5 48.3 47.8C117.2 448 288 448 288 448s170.8 0 213.4-11.5c23.5-6.3 42-24.1 48.3-47.8 11.4-42.9 11.4-132.3 11.4-132.3s0-89.4-11.4-132.3zm-317.5 213.5V175.2l142.7 81.2-142.7 81.2z"/></svg>
+          </a>
+          <a href="https://www.tiktok.com/@acha.karo.pk" target="_blank" rel="noopener" aria-label="TikTok">
+            <svg viewBox="0 0 448 512" width="24" height="24" fill="currentColor"><path d="M448,209.91a210.06,210.06,0,0,1-122.77-39.25V349.38A162.55,162.55,0,1,1,185,188.31V278.2a74.62,74.62,0,1,0,52.23,71.18V0l88,0a121.18,121.18,0,0,0,1.86,22.17h0A122.18,122.18,0,0,0,381,102.39a121.43,121.43,0,0,0,67,20.14Z"/></svg>
+          </a>
+        </div>
       </div>
     </div>
   </div>
