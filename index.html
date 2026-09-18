@@ -1,0 +1,383 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Acha Karo — Do good. Get seen.</title>
+<style>
+  :root {
+    --bg: #0e2a20;
+    --bg2: #123526;
+    --card: #163a2a;
+    --card-strong: #1b4530;
+    --line: rgba(246, 245, 236, 0.14);
+    --text: #f6f5ec;
+    --text-soft: rgba(246, 245, 236, 0.68);
+    --gold: #e0b23d;
+    --teal: #37c9b6;
+    --mint: #8bc34a;
+    --ink-on-gold: #16301f;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    overflow-x: hidden;
+  }
+  a { color: inherit; }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 24px; }
+
+  /* decorative swirl backdrop, reused from the brand's reel style */
+  .swirl-bg {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    opacity: 0.16;
+    pointer-events: none;
+  }
+
+  header {
+    position: relative;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 22px 24px;
+    max-width: 1080px;
+    margin: 0 auto;
+  }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 18px; }
+  .brand-badge {
+    width: 34px; height: 34px; border-radius: 10px;
+    background: linear-gradient(135deg, var(--gold), var(--mint));
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px;
+  }
+  nav { display: flex; gap: 22px; font-size: 14px; color: var(--text-soft); }
+  nav a { text-decoration: none; }
+  nav a:hover { color: var(--gold); }
+  .nav-cta {
+    background: var(--gold); color: var(--ink-on-gold); padding: 8px 18px;
+    border-radius: 100px; font-weight: 700; font-size: 13.5px; text-decoration: none;
+  }
+
+  /* HERO */
+  .hero {
+    position: relative;
+    padding: 40px 24px 20px;
+    max-width: 1080px;
+    margin: 0 auto;
+  }
+  .hero-grid {
+    position: relative;
+    z-index: 2;
+    display: grid;
+    grid-template-columns: 1.1fr 0.9fr;
+    gap: 32px;
+    align-items: center;
+  }
+  .eyebrow {
+    display: inline-block;
+    background: rgba(224, 178, 61, 0.14);
+    border: 1px solid rgba(224, 178, 61, 0.35);
+    color: var(--gold);
+    font-size: 12.5px;
+    font-weight: 700;
+    padding: 6px 14px;
+    border-radius: 100px;
+    margin-bottom: 18px;
+  }
+  h1 { font-size: 44px; line-height: 1.12; margin: 0 0 16px; }
+  h1 span { color: var(--gold); }
+  .hero p.lead { font-size: 16.5px; color: var(--text-soft); max-width: 480px; line-height: 1.6; margin-bottom: 26px; }
+  .cta-row { display: flex; gap: 14px; flex-wrap: wrap; }
+  .btn-primary {
+    background: var(--gold); color: var(--ink-on-gold); font-weight: 800; font-size: 15px;
+    padding: 14px 26px; border-radius: 100px; text-decoration: none; display: inline-flex;
+    align-items: center; gap: 8px; box-shadow: 0 10px 30px rgba(224,178,61,0.25);
+  }
+  .btn-ghost {
+    border: 1px solid var(--line); color: var(--text); font-weight: 700; font-size: 15px;
+    padding: 14px 26px; border-radius: 100px; text-decoration: none;
+  }
+
+  .hero-mascot { position: relative; display: flex; justify-content: center; }
+  .hero-mascot img {
+    width: 260px; max-width: 80%; filter: drop-shadow(0 20px 40px rgba(0,0,0,0.45));
+  }
+  .speech-bubble {
+    position: absolute;
+    top: 6%;
+    right: -6%;
+    background: var(--text);
+    color: var(--ink-on-gold);
+    font-weight: 700;
+    font-size: 13px;
+    padding: 10px 16px;
+    border-radius: 16px 16px 4px 16px;
+    box-shadow: 0 8px 20px rgba(0,0,0,0.3);
+    max-width: 170px;
+  }
+
+  /* FEATURES */
+  section { position: relative; z-index: 1; padding: 70px 24px; }
+  .section-head { text-align: center; margin-bottom: 40px; }
+  .section-head h2 { font-size: 30px; margin: 0 0 10px; }
+  .section-head p { color: var(--text-soft); font-size: 15px; margin: 0; }
+
+  .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; max-width: 1080px; margin: 0 auto; }
+  .grid-5 { display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px; max-width: 1080px; margin: 0 auto; }
+  .feature-card, .cat-card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    padding: 26px 18px;
+    text-align: center;
+  }
+  .feature-card .icon, .cat-card .icon { font-size: 32px; margin-bottom: 14px; }
+  .feature-card h3 { font-size: 15.5px; margin: 0 0 8px; }
+  .feature-card p { font-size: 12.5px; color: var(--text-soft); margin: 0; line-height: 1.5; }
+  .cat-card { padding: 20px 12px; font-size: 13px; font-weight: 700; }
+  .cat-card .icon { font-size: 26px; margin-bottom: 10px; }
+
+  /* MISSIONS / mascot showcase strip */
+  .missions {
+    background: var(--bg2);
+    border-top: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+  }
+  .missions-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 24px;
+    max-width: 1080px;
+    margin: 0 auto;
+  }
+  .mission-card {
+    background: var(--card-strong);
+    border: 1px solid var(--line);
+    border-radius: 22px;
+    padding: 24px 18px 18px;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+  }
+  .mission-card img { width: 132px; margin-bottom: 6px; filter: drop-shadow(0 10px 18px rgba(0,0,0,0.35)); }
+  .mission-card h4 { font-size: 14.5px; margin: 6px 0 4px; }
+  .mission-card p { font-size: 12px; color: var(--text-soft); margin: 0; line-height: 1.5; }
+  .mission-tag {
+    position: absolute; top: 14px; right: 14px;
+    background: rgba(224,178,61,0.16); color: var(--gold);
+    font-size: 10.5px; font-weight: 800; padding: 4px 10px; border-radius: 100px;
+    letter-spacing: 0.04em;
+  }
+
+  /* DOWNLOAD */
+  .download-panel {
+    max-width: 1080px;
+    margin: 0 auto;
+    background: linear-gradient(135deg, var(--card-strong), var(--card));
+    border: 1px solid var(--line);
+    border-radius: 26px;
+    padding: 44px;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 30px;
+    align-items: center;
+    position: relative;
+    overflow: hidden;
+  }
+  .download-panel .corner-mascot {
+    position: absolute;
+    bottom: -10px;
+    right: 30px;
+    width: 110px;
+    opacity: 0.9;
+  }
+  .steps { counter-reset: step; margin: 22px 0 0; padding: 0; list-style: none; }
+  .steps li {
+    counter-increment: step;
+    display: flex;
+    gap: 12px;
+    font-size: 13.5px;
+    color: var(--text-soft);
+    margin-bottom: 10px;
+    align-items: flex-start;
+  }
+  .steps li::before {
+    content: counter(step);
+    flex-shrink: 0;
+    width: 22px; height: 22px;
+    background: rgba(224,178,61,0.18);
+    color: var(--gold);
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11.5px; font-weight: 800;
+  }
+  .disclaimer {
+    margin-top: 18px; font-size: 12px; color: var(--text-soft);
+    border-left: 3px solid var(--gold); padding-left: 12px;
+  }
+
+  footer {
+    text-align: center;
+    padding: 40px 24px 50px;
+    color: var(--text-soft);
+    font-size: 13px;
+  }
+  footer .ig {
+    display: inline-flex; align-items: center; gap: 8px;
+    margin-top: 10px; font-weight: 700; color: var(--gold); text-decoration: none;
+  }
+
+  @media (max-width: 860px) {
+    h1 { font-size: 32px; }
+    .hero-grid { grid-template-columns: 1fr; text-align: center; }
+    .hero p.lead { margin-left: auto; margin-right: auto; }
+    .cta-row { justify-content: center; }
+    .hero-mascot { order: -1; margin-bottom: 10px; }
+    .speech-bubble { display: none; }
+    .grid-4 { grid-template-columns: repeat(2, 1fr); }
+    .grid-5 { grid-template-columns: repeat(2, 1fr); }
+    .missions-grid { grid-template-columns: 1fr; }
+    .download-panel { grid-template-columns: 1fr; padding: 30px; }
+    .download-panel .corner-mascot { position: static; width: 90px; margin: 20px auto 0; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <div class="brand-badge">🌿</div>
+    Acha Karo
+  </div>
+  <nav>
+    <a href="#features">Features</a>
+    <a href="#categories">Categories</a>
+    <a href="#guddi">Meet Guddi</a>
+  </nav>
+  <a class="nav-cta" href="#download">Download</a>
+</header>
+
+<section class="hero">
+  <div class="hero-grid">
+    <div>
+      <span class="eyebrow">🇵🇰 Made for Pakistan's good-doers</span>
+      <h1>Do something good.<br>Get <span>seen</span> for it.</h1>
+      <p class="lead">Log small civic acts — cleaning up litter, feeding strays, watering a plant — earn points, and climb the weekly leaderboard. Guddi's cheering you on the whole way.</p>
+      <div class="cta-row">
+        <a class="btn-primary" href="#download">⬇ Download the app</a>
+        <a class="btn-ghost" href="#guddi">Meet Guddi</a>
+      </div>
+    </div>
+    <div class="hero-mascot">
+      <img src="assets/paf-icon.png" alt="Guddi, the Acha Karo mascot, giving a peace sign" />
+      <div class="speech-bubble">Let's Acha Karo together! 🌱</div>
+    </div>
+  </div>
+</section>
+
+<section id="features">
+  <div class="section-head">
+    <h2>Four ways to show up</h2>
+    <p>Every good deed counts — and every one gets tracked.</p>
+  </div>
+  <div class="grid-4">
+    <div class="feature-card">
+      <div class="icon">📋</div>
+      <h3>Log a Deed</h3>
+      <p>Photograph a good action — litter cleanup, feeding strays, plant care — and log it in seconds.</p>
+    </div>
+    <div class="feature-card">
+      <div class="icon">⭐</div>
+      <h3>Earn Points</h3>
+      <p>Build streaks, unlock badges, and watch your score grow with every deed.</p>
+    </div>
+    <div class="feature-card">
+      <div class="icon">🚩</div>
+      <h3>Join a Campaign</h3>
+      <p>Follow cause-focused roadmaps and rally around a shared goal.</p>
+    </div>
+    <div class="feature-card">
+      <div class="icon">👑</div>
+      <h3>Climb the Board</h3>
+      <p>Get weekly recognition and see your name rise where everyone can see it.</p>
+    </div>
+  </div>
+</section>
+
+<section id="categories">
+  <div class="section-head">
+    <h2>Good deeds, five ways</h2>
+    <p>Whatever cause moves you, there's a category for it.</p>
+  </div>
+  <div class="grid-5">
+    <div class="cat-card"><div class="icon">🌍</div>Environmental</div>
+    <div class="cat-card"><div class="icon">🐾</div>Animal Welfare</div>
+    <div class="cat-card"><div class="icon">🏙️</div>Civic Responsibility</div>
+    <div class="cat-card"><div class="icon">🤝</div>Social Causes</div>
+    <div class="cat-card"><div class="icon">🏥</div>Health Initiatives</div>
+  </div>
+</section>
+
+<section class="missions" id="guddi">
+  <div class="section-head">
+    <h2>Meet Guddi</h2>
+    <p>She shows up for Pakistan in every uniform — on the ground, at sea, and in the sky.<br>Now it's your turn to show up for your street.</p>
+  </div>
+  <div class="missions-grid">
+    <div class="mission-card">
+      <span class="mission-tag">PAF</span>
+      <img src="assets/paf-sticker.png" alt="Guddi in Pakistan Air Force uniform" />
+      <h4>Guddi, Pakistan Air Force</h4>
+      <p>Sharp-eyed and always ready — just like you spotting a good deed to do.</p>
+    </div>
+    <div class="mission-card">
+      <span class="mission-tag">NAVY</span>
+      <img src="assets/navy-sticker.png" alt="Guddi in Pakistan Navy uniform" />
+      <h4>Guddi, Pakistan Navy</h4>
+      <p>Steady and dependable — the same energy she brings to every good cause.</p>
+    </div>
+    <div class="mission-card">
+      <span class="mission-tag">ARMY</span>
+      <img src="assets/army-sticker.png" alt="Guddi in Pakistan Army uniform" />
+      <h4>Guddi, Pakistan Army</h4>
+      <p>Disciplined and dedicated — showing up for the community, every single day.</p>
+    </div>
+  </div>
+</section>
+
+<section id="download">
+  <div class="download-panel">
+    <div>
+      <div class="section-head" style="text-align:left; margin-bottom:0;">
+        <h2>Download Acha Karo</h2>
+        <p>Direct APK install — no app store needed.</p>
+      </div>
+      <div class="cta-row" style="margin-top:22px;">
+        <a class="btn-primary" href="https://github.com/acha-karo/app/releases/latest" target="_blank" rel="noopener">⬇ Get the APK</a>
+      </div>
+      <ol class="steps">
+        <li>Tap the download button above to get the latest APK file.</li>
+        <li>Open your downloaded file from your notifications or Downloads folder.</li>
+        <li>If prompted, allow installs from this source in your phone's settings.</li>
+        <li>Tap Install and wait a few seconds.</li>
+        <li>Open Acha Karo and start logging good deeds!</li>
+      </ol>
+      <p class="disclaimer">Android may show a warning about installing from an unknown source since this isn't from the Play Store — this is expected and safe. Just allow the permission when asked.</p>
+    </div>
+    <img class="corner-mascot" src="assets/navy-icon.png" alt="" />
+  </div>
+</section>
+
+<footer>
+  <div>Made with ❤️ for a better Pakistan, one good deed at a time.</div>
+  <a class="ig" href="https://instagram.com/acha.karo.pk" target="_blank" rel="noopener">📷 @acha.karo.pk</a>
+</footer>
+
+</body>
+</html>
