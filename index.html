@@ -150,8 +150,8 @@
   }
   .missions-grid {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 24px;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 20px;
     max-width: 1080px;
     margin: 0 auto;
   }
@@ -221,6 +221,83 @@
     border-left: 3px solid var(--gold); padding-left: 12px;
   }
 
+  /* STICKER BAND */
+  .sticker-band {
+    position: relative;
+    background: var(--bg2);
+    border-top: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+    overflow: hidden;
+    padding: 60px 24px;
+  }
+  .sticker-band-inner {
+    position: relative;
+    max-width: 1080px;
+    margin: 0 auto;
+    min-height: 260px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .sticker-band-text {
+    position: relative;
+    z-index: 3;
+    text-align: center;
+    max-width: 460px;
+    background: rgba(7, 27, 17, 0.72);
+    backdrop-filter: blur(2px);
+    border-radius: 24px;
+    padding: 28px 30px;
+  }
+  .sticker-band-text h2 { font-size: 26px; margin: 0 0 8px; }
+  .sticker-band-text p { color: var(--text-soft); font-size: 14px; margin: 0 0 18px; }
+  .social-row { display: flex; gap: 16px; justify-content: center; }
+  .social-row a {
+    color: var(--gold);
+    background: rgba(224,178,61,0.14);
+    width: 46px; height: 46px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    transition: transform 0.15s ease, background 0.15s ease;
+  }
+  .social-row a:hover { background: rgba(224,178,61,0.28); transform: translateY(-2px); }
+  .sticker {
+    position: absolute;
+    opacity: 0.9;
+    filter: drop-shadow(0 8px 16px rgba(0,0,0,0.4));
+    z-index: 1;
+    pointer-events: none;
+  }
+  .s1 { width: 90px; top: -10px; left: 4%; transform: rotate(-12deg); }
+  .s2 { width: 80px; bottom: -20px; left: 14%; transform: rotate(9deg); }
+  .s3 { width: 84px; top: 10px; right: 6%; transform: rotate(10deg); }
+  .s4 { width: 130px; bottom: -30px; right: 2%; transform: rotate(-6deg); }
+  .s5 { width: 76px; bottom: 30px; left: -2%; transform: rotate(-16deg); opacity: 0.6; }
+  .s6 { width: 70px; top: -14px; right: 22%; transform: rotate(-8deg); opacity: 0.6; }
+  .s7 { width: 78px; bottom: -24px; right: 30%; transform: rotate(14deg); opacity: 0.55; }
+
+  /* CONTACT */
+  .contact-form {
+    max-width: 560px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .contact-form input, .contact-form textarea {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 13px 16px;
+    color: var(--text);
+    font-size: 14px;
+    font-family: inherit;
+    outline: none;
+  }
+  .contact-form input:focus, .contact-form textarea:focus { border-color: var(--gold); }
+  .contact-status { font-size: 13px; margin-top: -4px; }
+  .contact-status.ok { color: var(--mint); }
+  .contact-status.err { color: #E39B84; }
+
   footer {
     text-align: center;
     padding: 40px 24px 50px;
@@ -230,6 +307,11 @@
   footer .ig {
     display: inline-flex; align-items: center; gap: 8px;
     margin-top: 10px; font-weight: 700; color: var(--gold); text-decoration: none;
+  }
+
+  @media (max-width: 640px) {
+    .sticker { display: none; }
+    .sticker-band-text { background: transparent; padding: 0; backdrop-filter: none; }
   }
 
   @media (max-width: 640px) {
@@ -280,6 +362,7 @@
     <a href="#features">Features</a>
     <a href="#categories">Categories</a>
     <a href="#guddi">Meet Guddi</a>
+    <a href="#contact">Contact</a>
   </nav>
   <a class="nav-cta" href="#download">Download</a>
 </header>
@@ -302,7 +385,8 @@
   </div>
 </section>
 
-<section id="features">
+<section id="features" style="position:relative;">
+  <img src="assets/army-icon.png" alt="" style="position:absolute; top:16px; right:24px; width:64px; opacity:0.35; transform:rotate(8deg); pointer-events:none;" />
   <div class="section-head">
     <h2>Four ways to show up</h2>
     <p>Every good deed counts — and every one gets tracked.</p>
@@ -331,7 +415,8 @@
   </div>
 </section>
 
-<section id="categories">
+<section id="categories" style="position:relative;">
+  <img src="assets/paf-icon.png" alt="" style="position:absolute; top:10px; left:20px; width:60px; opacity:0.3; transform:rotate(-10deg); pointer-events:none;" />
   <div class="section-head">
     <h2>Good deeds, five ways</h2>
     <p>Whatever cause moves you, there's a category for it.</p>
@@ -352,6 +437,12 @@
   </div>
   <div class="missions-grid">
     <div class="mission-card">
+      <span class="mission-tag">OFF DUTY</span>
+      <img src="assets/guddi-wink.png" alt="Guddi, everyday" style="width:132px; margin-bottom:6px; border-radius:16px;" />
+      <h4>Guddi, Everyday</h4>
+      <p>Same girl, no uniform — just someone who decided to do something good today.</p>
+    </div>
+    <div class="mission-card">
       <span class="mission-tag">PAF</span>
       <img src="assets/paf-sticker.png" alt="Guddi in Pakistan Air Force uniform" />
       <h4>Guddi, Pakistan Air Force</h4>
@@ -370,6 +461,47 @@
       <p>Disciplined and dedicated — showing up for the community, every single day.</p>
     </div>
   </div>
+</section>
+
+<section class="sticker-band">
+  <div class="sticker-band-inner">
+    <img src="assets/paf-icon.png" alt="" class="sticker s1" />
+    <img src="assets/navy-sticker.png" alt="" class="sticker s2" />
+    <img src="assets/army-icon.png" alt="" class="sticker s3" />
+    <img src="assets/guddi-action-phone.png" alt="" class="sticker s4" />
+    <img src="assets/paf-sticker.png" alt="" class="sticker s5" />
+    <img src="assets/navy-icon.png" alt="" class="sticker s6" />
+    <img src="assets/army-sticker.png" alt="" class="sticker s7" />
+    <div class="sticker-band-text">
+      <h2>Follow Guddi everywhere</h2>
+      <p>Reels, uniforms, good deeds — she shows up in all of it. Come say hi.</p>
+      <div class="social-row">
+        <a href="https://www.instagram.com/acha.karo.pk" target="_blank" rel="noopener" aria-label="Instagram">
+          <svg viewBox="0 0 448 512" width="26" height="26" fill="currentColor"><path d="M224.1 141c-63.6 0-114.9 51.3-114.9 114.9s51.3 114.9 114.9 114.9S339 319.5 339 255.9 287.7 141 224.1 141zm0 189.6c-41.1 0-74.7-33.5-74.7-74.7s33.5-74.7 74.7-74.7 74.7 33.5 74.7 74.7-33.6 74.7-74.7 74.7zm146.4-194.3c0 14.9-12 26.8-26.8 26.8-14.9 0-26.8-12-26.8-26.8s12-26.8 26.8-26.8 26.8 12 26.8 26.8zm76.1 27.2c-1.7-35.9-9.9-67.7-36.2-93.9-26.2-26.2-58-34.4-93.9-36.2-37-2.1-147.9-2.1-184.9 0-35.8 1.7-67.6 9.9-93.9 36.1s-34.4 58-36.2 93.9c-2.1 37-2.1 147.9 0 184.9 1.7 35.9 9.9 67.7 36.2 93.9s58 34.4 93.9 36.2c37 2.1 147.9 2.1 184.9 0 35.9-1.7 67.7-9.9 93.9-36.2 26.2-26.2 34.4-58 36.2-93.9 2.1-37 2.1-147.8 0-184.8zM398.8 388c-7.8 19.6-22.9 34.7-42.6 42.6-29.5 11.7-99.5 9-132.1 9s-102.7 2.6-132.1-9c-19.6-7.8-34.7-22.9-42.6-42.6-11.7-29.5-9-99.5-9-132.1s-2.6-102.7 9-132.1c7.8-19.6 22.9-34.7 42.6-42.6 29.5-11.7 99.5-9 132.1-9s102.7-2.6 132.1 9c19.6 7.8 34.7 22.9 42.6 42.6 11.7 29.5 9 99.5 9 132.1s2.7 102.7-9 132.1z"/></svg>
+        </a>
+        <a href="https://youtube.com/@achakaropk" target="_blank" rel="noopener" aria-label="YouTube">
+          <svg viewBox="0 0 576 512" width="28" height="28" fill="currentColor"><path d="M549.7 124.1c-6.3-23.7-24.8-42.3-48.3-48.6C458.8 64 288 64 288 64S117.2 64 74.6 75.5c-23.5 6.3-42 24.9-48.3 48.6-11.4 42.9-11.4 132.3-11.4 132.3s0 89.4 11.4 132.3c6.3 23.7 24.8 41.5 48.3 47.8C117.2 448 288 448 288 448s170.8 0 213.4-11.5c23.5-6.3 42-24.1 48.3-47.8 11.4-42.9 11.4-132.3 11.4-132.3s0-89.4-11.4-132.3zm-317.5 213.5V175.2l142.7 81.2-142.7 81.2z"/></svg>
+        </a>
+        <a href="https://www.tiktok.com/@acha.karo.pk" target="_blank" rel="noopener" aria-label="TikTok">
+          <svg viewBox="0 0 448 512" width="24" height="24" fill="currentColor"><path d="M448,209.91a210.06,210.06,0,0,1-122.77-39.25V349.38A162.55,162.55,0,1,1,185,188.31V278.2a74.62,74.62,0,1,0,52.23,71.18V0l88,0a121.18,121.18,0,0,0,1.86,22.17h0A122.18,122.18,0,0,0,381,102.39a121.43,121.43,0,0,0,67,20.14Z"/></svg>
+        </a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="contact">
+  <div class="section-head">
+    <h2>Get in touch</h2>
+    <p>Question, bug, or just want to say hi? Guddi reads everything.</p>
+  </div>
+  <form id="contact-form" class="contact-form">
+    <input type="text" name="name" placeholder="Your name" required />
+    <input type="email" name="email" placeholder="Your email" required />
+    <textarea name="message" placeholder="What's on your mind?" rows="4" required></textarea>
+    <button type="submit" class="btn-primary" style="align-self:flex-start;">Send message</button>
+    <p id="contact-status" class="contact-status" hidden></p>
+  </form>
 </section>
 
 <section id="download">
@@ -397,8 +529,60 @@
 
 <footer>
   <div>Made with ❤️ for a better Pakistan, one good deed at a time.</div>
-  <a class="ig" href="https://instagram.com/acha.karo.pk" target="_blank" rel="noopener">📷 @acha.karo.pk</a>
+  <div style="margin-top: 12px; font-weight: 700; color: var(--gold);">@acha.karo.pk</div>
 </footer>
+
+<script>
+(function () {
+  var SUPABASE_URL = 'https://kpajocmfrfkazaelbocw.supabase.co';
+  var SUPABASE_ANON_KEY = 'sb_publishable_xUOngckXVIPOIJ8vyOQtuQ_wtWD6Xec';
+
+  var form = document.getElementById('contact-form');
+  var status = document.getElementById('contact-status');
+
+  form.addEventListener('submit', async function (e) {
+    e.preventDefault();
+    var submitBtn = form.querySelector('button[type="submit"]');
+    var data = new FormData(form);
+    var payload = {
+      name: data.get('name').trim(),
+      email: data.get('email').trim(),
+      message: data.get('message').trim(),
+    };
+
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Sending…';
+    status.hidden = true;
+
+    try {
+      var res = await fetch(SUPABASE_URL + '/rest/v1/website_contact_messages', {
+        method: 'POST',
+        headers: {
+          'apikey': SUPABASE_ANON_KEY,
+          'Authorization': 'Bearer ' + SUPABASE_ANON_KEY,
+          'Content-Type': 'application/json',
+          'Prefer': 'return=minimal',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) throw new Error('Request failed');
+
+      form.reset();
+      status.textContent = "Sent! Guddi's on it. 🌱";
+      status.className = 'contact-status ok';
+      status.hidden = false;
+    } catch (err) {
+      status.textContent = "Couldn't send that — please try again in a moment.";
+      status.className = 'contact-status err';
+      status.hidden = false;
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Send message';
+    }
+  });
+})();
+</script>
 
 </body>
 </html>
