@@ -17,6 +17,7 @@ export default function SkinsAdminPage() {
   const [loadError, setLoadError] = useState(null);
   const [editingSkin, setEditingSkin] = useState(null);
   const [editingBadges, setEditingBadges] = useState(null);
+  const [addingSkin, setAddingSkin] = useState(false);
 
   useEffect(() => {
     load();
@@ -50,9 +51,14 @@ export default function SkinsAdminPage() {
         <h1 style={{ fontSize: 22 }}>Skins, Badges & Stickers</h1>
       </div>
 
-      <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid var(--line)', marginBottom: 16, flexShrink: 0 }}>
-        <div onClick={() => setTab('skins')} style={tab === 'skins' ? tabActive : tabStyle}>Vehicle Skins</div>
-        <div onClick={() => setTab('badges')} style={tab === 'badges' ? tabActive : tabStyle}>Badges & Stickers</div>
+      <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid var(--line)', marginBottom: 16, flexShrink: 0, alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ display: 'flex', gap: 4 }}>
+          <div onClick={() => setTab('skins')} style={tab === 'skins' ? tabActive : tabStyle}>Vehicle Skins</div>
+          <div onClick={() => setTab('badges')} style={tab === 'badges' ? tabActive : tabStyle}>Badges & Stickers</div>
+        </div>
+        {/* New — real way to release a skin that isn't tied to any campaign at all, rather than
+            skin creation only ever being possible nested inside a specific campaign's own form. */}
+        {tab === 'skins' && <button onClick={() => setAddingSkin(true)} style={{ ...btnGold, marginBottom: 8 }}>+ Add Standalone Skin</button>}
       </div>
 
       {loadError && <div style={errorBoxStyle}>Could not load: {loadError}</div>}
@@ -66,7 +72,7 @@ export default function SkinsAdminPage() {
               <div style={iconBoxStyle}>{displayIcon(skin.icon)}</div>
               <div style={{ flex: 1 }}>
                 <div style={{ fontWeight: 600, fontSize: 13.5 }}>{skin.name}</div>
-                <div style={{ fontSize: 11, color: 'var(--text-soft)' }}>{skin.campaigns?.title ?? skin.campaign_id} · {skin.points_cost} pts{skin.visible === false ? ' · Paused' : ''}</div>
+                <div style={{ fontSize: 11, color: 'var(--text-soft)' }}>{skin.campaigns?.title ?? (skin.campaign_id ? skin.campaign_id : 'Standalone — no campaign')} · {skin.points_cost} pts{skin.visible === false ? ' · Paused' : ''}</div>
               </div>
               <button onClick={() => setEditingSkin(skin)} style={btnGhost}>Edit</button>
               <button onClick={() => toggleVisible(skin)} style={skin.visible === false ? unpauseButtonStyle : pauseButtonStyle}>
@@ -92,7 +98,49 @@ export default function SkinsAdminPage() {
 
       {editingSkin && <SkinEditModal skin={editingSkin} onClose={() => setEditingSkin(null)} onSaved={() => { setEditingSkin(null); load(); }} />}
       {editingBadges && <BadgeEditModal campaign={editingBadges} onClose={() => setEditingBadges(null)} onSaved={() => { setEditingBadges(null); load(); }} />}
+      {addingSkin && <AddSkinModal onClose={() => setAddingSkin(false)} onSaved={() => { setAddingSkin(false); load(); }} />}
     </div>
+  );
+}
+
+// New — the real, previously-missing piece: creating a genuinely campaign-independent skin.
+// campaign_id is left null on purpose — vehicle_skins.campaign_id is now nullable specifically
+// to support this (see final_skin_policy.sql).
+function AddSkinModal({ onClose, onSaved }) {
+  const [id, setId] = useState('');
+  const [name, setName] = useState('');
+  const [icon, setIcon] = useState('');
+  const [pointsCost, setPointsCost] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+
+  async function save() {
+    if (!id.trim() || !name.trim()) {
+      setError('A real ID and name are both required.');
+      return;
+    }
+    setSaving(true);
+    const { error } = await supabase.from('vehicle_skins').insert({
+      id: id.trim(), name, icon, points_cost: Number(pointsCost) || 0, campaign_id: null,
+    });
+    setSaving(false);
+    if (error) { setError(error.message); return; }
+    onSaved();
+  }
+
+  return (
+    <SmallModal title="New Standalone Skin (no campaign)" onClose={onClose}>
+      {error && <div style={errorBoxStyle}>{error}</div>}
+      <Field label="ID (short, unique, e.g. gold_sports_car)"><input value={id} onChange={(e) => setId(e.target.value)} style={inputStyle} /></Field>
+      <Field label="Name"><input value={name} onChange={(e) => setName(e.target.value)} style={inputStyle} /></Field>
+      <Field label="Icon (emoji or image URL)"><input value={icon} onChange={(e) => setIcon(e.target.value)} style={inputStyle} /></Field>
+      <Field label="Points Cost"><input value={pointsCost} onChange={(e) => setPointsCost(e.target.value)} style={inputStyle} /></Field>
+      <p style={{ fontSize: 11, color: 'var(--text-soft)' }}>Not tied to any campaign — always purchasable with points, no mission progress required, same as any other ungated skin.</p>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, paddingTop: 6 }}>
+        <button onClick={onClose} style={btnGhost}>Cancel</button>
+        <button onClick={save} disabled={saving} style={btnGold}>{saving ? 'Saving…' : 'Create'}</button>
+      </div>
+    </SmallModal>
   );
 }
 
