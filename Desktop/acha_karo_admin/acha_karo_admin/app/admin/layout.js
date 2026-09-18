@@ -12,6 +12,7 @@ const TABS = [
   { href: '/admin/badges', label: 'Badge Freeze', icon: '🏅' },
   { href: '/admin/moderation', label: 'Moderation', icon: '🛡️' },
   { href: '/admin/feedback', label: 'Feedback', icon: '💬' },
+  { href: '/admin/contact', label: 'Contact Us', icon: '✉️' },
   { href: '/admin/rewards', label: 'Rewards', icon: '🏆' },
   { href: '/admin/analytics', label: 'Analytics', icon: '📊' },
 ];
