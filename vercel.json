@@ -1,0 +1,5 @@
+{
+  "installCommand": "echo 'no install step — flutter pub get runs as part of buildCommand'",
+  "buildCommand": "git clone https://github.com/flutter/flutter.git --depth 1 -b stable _flutter && export PATH=\"$PWD/_flutter/bin:$PATH\" && flutter pub get && flutter build web --release",
+  "outputDirectory": "build/web"
+}
