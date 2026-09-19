@@ -1,52 +1,52 @@
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../theme/app_theme.dart';
 import '../state/app_state.dart';
+import '../state/demo_app_state.dart';
+import '../widgets/animated_wallpaper.dart';
 import '../screens/notifications_screen.dart';
 import '../screens/history_screen.dart';
 import '../screens/contact_screen.dart';
-import '../screens/simulator_screen.dart';
 import '../screens/settings_screen.dart';
-import 'edit_profile_sheet.dart';
+import '../screens/friends_screen.dart';
 
 // Pilot scope — Friends/Groups deliberately hidden (parked as MVP2, per the current direction,
 // not deleted — all the underlying code still exists, just not surfaced as an entry point here).
-// Order: Edit Profile, Notifications, History, Contact, Settings.
+// Order: Notifications, History, Contact, Settings. Edit Profile removed — Profile is a real
+// tab now with its own edit access, so this was a redundant second path.
 class HomeSideSheet extends StatelessWidget {
   const HomeSideSheet({super.key});
 
   @override
   Widget build(BuildContext context) {
     final state = context.watch<AppState>();
+    // Real bug fixed here: this was hardcoded to AppColors.bg2, never reacting to the wallpaper
+    // setting like every other screen does. Drawer's own backgroundColor only accepts a solid
+    // color (no gradient support), so this uses the same Container-wrapping pattern already
+    // established elsewhere (History, etc.) instead — transparent Drawer background, real
+    // gradient Container underneath.
     return Drawer(
-      backgroundColor: AppColors.bg2,
+      backgroundColor: Colors.transparent,
       width: 280,
-      child: SafeArea(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 10),
-              child: Text('Menu', style: AppFonts.fraunces(size: 18, weight: FontWeight.w600)),
-            ),
-            const Divider(color: Color(0x1FF6F5EC), height: 1),
-            Expanded(
+      child: Container(
+        decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: wallpaperSwatches[state.wallpaperSwatchIndex])),
+        child: SafeArea(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 10),
+                child: Text('Menu', style: AppFonts.fraunces(size: 18, weight: FontWeight.w600)),
+              ),
+              const Divider(color: Color(0x1FF6F5EC), height: 1),
+              Expanded(
               child: ListView(
                 padding: const EdgeInsets.symmetric(vertical: 8),
                 children: [
-                  _SheetItem(
-                    icon: '✏️',
-                    label: 'Edit Profile',
-                    onTap: () {
-                      Navigator.of(context).pop();
-                      showModalBottomSheet(
-                        context: context,
-                        isScrollControlled: true,
-                        backgroundColor: Colors.transparent,
-                        builder: (_) => const EditProfileSheet(),
-                      );
-                    },
-                  ),
+                  // Edit Profile entry removed — Profile is a real tab now with its own Edit
+                  // Profile access, so this was a redundant second path to the same place.
+                  // EditProfileSheet itself untouched, still reachable from Profile.
                   _SheetItem(
                     icon: '🔔',
                     label: 'Notifications',
@@ -67,7 +67,7 @@ class HomeSideSheet extends StatelessWidget {
                   const Divider(color: Color(0x1FF6F5EC), height: 24),
                   _SheetItem(
                     icon: '💬',
-                    label: 'Contact',
+                    label: 'Contact us',
                     onTap: () {
                       Navigator.of(context).pop();
                       Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ContactScreen()));
@@ -81,20 +81,37 @@ class HomeSideSheet extends StatelessWidget {
                       Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SettingsScreen()));
                     },
                   ),
-                  const Divider(color: Color(0x1FF6F5EC), height: 24),
-                  _SheetItem(
-                    icon: '🧪',
-                    label: 'Simulator (testing)',
-                    onTap: () {
-                      Navigator.of(context).pop();
-                      Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SimulatorScreen()));
-                    },
-                  ),
+                  // Simulator entry removed for APK readiness — a testing tool with fake-data
+                  // controls (advance day, fake flagged deeds) has no place in a real build
+                  // going to real testers. SimulatorScreen's code untouched, just unreachable.
+
+                  // Debug-only preview of the (still-hidden-from-real-users) Friends screen,
+                  // backed entirely by DemoAppState's in-memory fake data — zero Supabase calls,
+                  // does not un-hide Friends for real users. kDebugMode is a compile-time
+                  // constant, so this whole block (including the imports it alone would need)
+                  // is dead-code-eliminated from release builds, not just hidden at runtime.
+                  if (kDebugMode) ...[
+                    const Divider(color: Color(0x1FF6F5EC), height: 24),
+                    _SheetItem(
+                      icon: '🧪',
+                      label: 'Friends (Demo)',
+                      onTap: () {
+                        Navigator.of(context).pop();
+                        Navigator.of(context).push(MaterialPageRoute(
+                          builder: (_) => ChangeNotifierProvider<AppState>(
+                            create: (_) => DemoAppState(),
+                            child: const FriendsScreen(initialTab: FriendsSubTab.approve),
+                          ),
+                        ));
+                      },
+                    ),
+                  ],
                 ],
               ),
             ),
           ],
         ),
+      ),
       ),
     );
   }

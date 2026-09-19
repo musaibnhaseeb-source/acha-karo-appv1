@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../theme/app_theme.dart';
 import '../state/app_state.dart';
+import '../widgets/animated_wallpaper.dart';
 import '../data/deed_catalog.dart';
 
 enum FriendsSubTab { approve, manage, assigned }
@@ -28,79 +28,144 @@ class _FriendsScreenState extends State<FriendsScreen> {
     tab = widget.initialTab;
   }
 
-  Future<void> _showInviteCode(BuildContext context) async {
-    final appState = context.read<AppState>();
-    final (link, error) = await appState.generateInviteLink();
-    if (!context.mounted) return;
-    if (link == null) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error ?? 'Could not generate an invite link.')));
-      return;
-    }
-    showDialog(
+  // Invite-link generate/redeem removed entirely — superseded by the membership-number + name
+  // request flow below (a real friend request via `friendships`, not a link).
+
+  // Shows the two-field add-friend form, sends the request, and — only for an adult/minor
+  // cross-boundary match — walks the requester through the relationship question before the
+  // request actually goes out. Every branch (plain success, needs a relationship answer, or an
+  // error) is handled here so callers just fire-and-forget this.
+  Future<void> _showAddFriendDialog(BuildContext context) async {
+    final membershipController = TextEditingController();
+    final nameController = TextEditingController();
+    final submitted = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: AppColors.bg2,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-        title: Text('Your invite link', style: AppFonts.fraunces(size: 16, weight: FontWeight.w600)),
+        title: Text('Add a friend', style: AppFonts.fraunces(size: 16, weight: FontWeight.w600)),
         content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('Share this with a friend, along with the app download link — one-time use only.', style: AppFonts.inter(size: 12, color: AppColors.textSoft)),
+          Text('Enter their membership number and the name on their profile — both have to match.', style: AppFonts.inter(size: 11.5, color: AppColors.textSoft)),
           const SizedBox(height: 14),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
-            decoration: BoxDecoration(color: AppColors.oliveCard, borderRadius: BorderRadius.circular(12)),
-            alignment: Alignment.center,
-            child: Text(link, textAlign: TextAlign.center, style: AppFonts.plexMono(size: 13.5, weight: FontWeight.w700, color: AppColors.gold)),
+          TextField(
+            controller: membershipController,
+            style: AppFonts.plexMono(size: 13, color: AppColors.text),
+            decoration: InputDecoration(hintText: 'Membership number', hintStyle: AppFonts.plexMono(size: 12, color: AppColors.textSoft.withOpacity(0.5))),
+          ),
+          const SizedBox(height: 10),
+          TextField(
+            controller: nameController,
+            style: AppFonts.inter(size: 13, color: AppColors.text),
+            decoration: InputDecoration(hintText: 'Their name', hintStyle: AppFonts.inter(size: 12, color: AppColors.textSoft.withOpacity(0.5))),
           ),
         ]),
         actions: [
+          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: Text('Cancel', style: AppFonts.inter(size: 13, color: AppColors.textSoft))),
           TextButton(
-            onPressed: () {
-              Clipboard.setData(ClipboardData(text: link));
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Copied to clipboard.')));
-            },
-            child: Text('Copy', style: AppFonts.inter(size: 13, weight: FontWeight.w600, color: AppColors.gold)),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text('Send request', style: AppFonts.inter(size: 13, weight: FontWeight.w700, color: AppColors.gold)),
           ),
-          TextButton(onPressed: () => Navigator.of(ctx).pop(), child: Text('Done', style: AppFonts.inter(size: 13, color: AppColors.textSoft))),
         ],
       ),
     );
+    if (submitted != true || !context.mounted) return;
+
+    final membershipNumber = membershipController.text.trim();
+    final name = nameController.text.trim();
+    if (membershipNumber.isEmpty || name.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Both fields are required.')));
+      return;
+    }
+
+    final appState = context.read<AppState>();
+    var result = await appState.requestFriend(membershipNumber, name);
+    if (!context.mounted) return;
+
+    if (result['status'] == 'needs_relationship_answer') {
+      final isAdult = result['requester_is_adult'] as bool? ?? true;
+      final options = (result['options'] as List<dynamic>? ?? []).cast<String>();
+      final answer = await _showRelationshipPicker(context, isAdult: isAdult, forRequester: true);
+      if (answer == null || !context.mounted) return; // cancelled — nothing was sent
+      if (!options.contains(answer)) return; // shouldn't happen, options come straight from the server
+      result = await appState.requestFriend(membershipNumber, name, relationshipAnswer: answer);
+      if (!context.mounted) return;
+    }
+
+    final status = result['status'] as String?;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(status == 'success' ? 'Friend request sent.' : (result['message'] as String? ?? 'Something went wrong.')),
+    ));
   }
 
-  void _redeemCode(BuildContext context) {
-    final codeController = TextEditingController();
-    showDialog(
+  // Mirrors _showAddFriendDialog's two-step handling, on the accept side — accept can also come
+  // back needing a relationship answer (only the server knows both users' dob), and the broken
+  // wiring this replaced (a call to a nonexistent `approveFriendRequest`, passing the display name
+  // instead of the friendship id) meant that branch was never reachable to begin with.
+  Future<void> _handleApprove(BuildContext context, PendingFriendRequest request) async {
+    final appState = context.read<AppState>();
+    var result = await appState.acceptFriendRequest(request.id);
+    if (!context.mounted) return;
+
+    if (result['status'] == 'needs_relationship_answer') {
+      final isAdult = result['requester_is_adult'] as bool? ?? true;
+      final answer = await _showRelationshipPicker(context, isAdult: isAdult, forRequester: false);
+      if (answer == null || !context.mounted) return; // cancelled — request stays pending
+      result = await appState.acceptFriendRequest(request.id, relationshipAnswer: answer);
+      if (!context.mounted) return;
+    }
+
+    final status = result['status'] as String?;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text((status == 'success' || status == 'flagged') ? 'Friend request accepted.' : (result['message'] as String? ?? 'Something went wrong.')),
+    ));
+  }
+
+  // Shared by both the requester (send-time) and the addressee (accept-time) — the server tells
+  // the caller which set of options applies and whether this is the "adult" or "minor" side of
+  // the question, per Musa's exact framing ("How is this minor/adult related to you?").
+  Future<String?> _showRelationshipPicker(BuildContext context, {required bool isAdult, required bool forRequester}) {
+    return showDialog<String>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.bg2,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-        title: Text('Redeem a link', style: AppFonts.fraunces(size: 16, weight: FontWeight.w600)),
-        content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(
-            'This is now real — checks the code against Supabase and connects you with whoever sent it. Their name is looked up automatically.',
-            style: AppFonts.inter(size: 10.5, color: AppColors.textSoft, height: 1.4),
+      builder: (ctx) {
+        final options = forRequester
+            ? (isAdult
+                ? const ['Parent', 'Grandparent', 'Aunt/Uncle', 'Teacher/Mentor', 'Sibling', 'Family Friend', 'Neighbor', 'Other']
+                : const ['Child', 'Grandchild', 'Niece/Nephew', 'Student', 'Sibling', 'Family Friend', 'Neighbor', 'Other'])
+            : (isAdult
+                ? const ['Parent', 'Grandparent', 'Aunt/Uncle', 'Teacher/Mentor', 'Sibling', 'Family Friend', 'Neighbor', 'Other']
+                : const ['Child', 'Grandchild', 'Niece/Nephew', 'Student', 'Sibling', 'Family Friend', 'Neighbor', 'Other']);
+        return AlertDialog(
+          backgroundColor: AppColors.bg2,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+          title: Text(
+            isAdult ? 'How is this minor related to you?' : 'How is this adult related to you?',
+            style: AppFonts.fraunces(size: 15, weight: FontWeight.w600),
           ),
-          const SizedBox(height: 14),
-          TextField(
-            controller: codeController,
-            style: AppFonts.plexMono(size: 13, color: AppColors.text),
-            decoration: InputDecoration(hintText: 'Paste the invite link', hintStyle: AppFonts.plexMono(size: 13, color: AppColors.textSoft.withOpacity(0.5))),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: options
+                  .map((o) => Padding(
+                        padding: const EdgeInsets.only(bottom: 6),
+                        child: GestureDetector(
+                          onTap: () => Navigator.of(ctx).pop(o),
+                          child: Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+                            decoration: BoxDecoration(color: AppColors.oliveCard, borderRadius: BorderRadius.circular(10)),
+                            child: Text(o, style: AppFonts.inter(size: 12.5, weight: FontWeight.w600)),
+                          ),
+                        ),
+                      ))
+                  .toList(),
+            ),
           ),
-        ]),
-        actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(), child: Text('Cancel', style: AppFonts.inter(size: 13, color: AppColors.textSoft))),
-          TextButton(
-            onPressed: () async {
-              final appState = context.read<AppState>();
-              final error = await appState.redeemInviteCode(codeController.text);
-              if (!ctx.mounted) return;
-              Navigator.of(ctx).pop();
-              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error ?? 'Friend added!')));
-            },
-            child: Text('Redeem', style: AppFonts.inter(size: 13, weight: FontWeight.w700, color: AppColors.gold)),
-          ),
-        ],
-      ),
+          actions: [
+            TextButton(onPressed: () => Navigator.of(ctx).pop(), child: Text('Cancel', style: AppFonts.inter(size: 13, color: AppColors.textSoft))),
+          ],
+        );
+      },
     );
   }
 
@@ -117,13 +182,28 @@ class _FriendsScreenState extends State<FriendsScreen> {
         title: Text('Friends', style: AppFonts.inter(size: 14, weight: FontWeight.w600)),
         centerTitle: true,
         actions: [
-          IconButton(icon: const Icon(Icons.link, color: AppColors.textSoft, size: 20), onPressed: () => _redeemCode(context), tooltip: 'Redeem a link'),
-          IconButton(icon: const Icon(Icons.person_add_alt_1, color: AppColors.gold, size: 20), onPressed: () => _showInviteCode(context)),
+          IconButton(icon: const Icon(Icons.person_add_alt_1, color: AppColors.gold, size: 20), onPressed: () => _showAddFriendDialog(context)),
         ],
       ),
-      body: Container(
-        decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: wallpaperSwatches[context.watch<AppState>().wallpaperSwatchIndex])),
-        child: SafeArea(
+      // Same real bug fixed here as the other screens in this batch.
+      body: Stack(
+        // Real, genuine root-cause fix: Stack defaults to StackFit.loose, meaning it sizes
+        // itself to its non-Positioned child (SafeArea), which in turn sizes to its OWN content
+        // rather than filling available space. Every previous attempt only ever changed the
+        // background widget itself, never addressed this — the Positioned background was
+        // always being clipped down to match the Stack's own, content-sized bounds, regardless
+        // of what explicit size it was given. This forces the Stack itself to fill available
+        // space unconditionally, which is the actual fix.
+        fit: StackFit.expand,
+        children: [
+          Positioned(
+            top: 0,
+            left: 0,
+            width: MediaQuery.of(context).size.width,
+            height: MediaQuery.of(context).size.height,
+            child: AnimatedWallpaper(gradientColors: wallpaperSwatches[context.watch<AppState>().wallpaperSwatchIndex]),
+          ),
+        SafeArea(
           child: Column(children: [
             Padding(
               padding: const EdgeInsets.fromLTRB(18, 10, 18, 0),
@@ -141,7 +221,11 @@ class _FriendsScreenState extends State<FriendsScreen> {
               child: SingleChildScrollView(
                 padding: const EdgeInsets.fromLTRB(18, 14, 18, 30),
                 child: switch (tab) {
-                  FriendsSubTab.approve => _ApproveTab(state: state),
+                  FriendsSubTab.approve => _ApproveTab(
+                      state: state,
+                      onApprove: (r) => _handleApprove(context, r),
+                      onDecline: (r) => state.declineFriendRequest(r.id),
+                    ),
                   FriendsSubTab.manage => _ManageTab(state: state),
                   FriendsSubTab.assigned => _AssignedTab(state: state),
                 },
@@ -149,6 +233,7 @@ class _FriendsScreenState extends State<FriendsScreen> {
             ),
           ]),
         ),
+        ],
       ),
     );
   }
@@ -175,7 +260,9 @@ class _SegBtn extends StatelessWidget {
 
 class _ApproveTab extends StatelessWidget {
   final AppState state;
-  const _ApproveTab({required this.state});
+  final void Function(PendingFriendRequest) onApprove;
+  final void Function(PendingFriendRequest) onDecline;
+  const _ApproveTab({required this.state, required this.onApprove, required this.onDecline});
   @override
   Widget build(BuildContext context) {
     if (state.pendingFriendRequests.isEmpty) {
@@ -187,7 +274,7 @@ class _ApproveTab extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('People who signed up using one of your invite links.', style: AppFonts.inter(size: 12, color: AppColors.textSoft)),
+        Text('Friend requests waiting for your approval.', style: AppFonts.inter(size: 12, color: AppColors.textSoft)),
         const SizedBox(height: 12),
         ...state.pendingFriendRequests.map((r) => Container(
               margin: const EdgeInsets.only(bottom: 8),
@@ -196,7 +283,7 @@ class _ApproveTab extends StatelessWidget {
               child: Row(children: [
                 Expanded(child: Text(r.name, style: AppFonts.inter(size: 13, weight: FontWeight.w600))),
                 GestureDetector(
-                  onTap: () => context.read<AppState>().approveFriendRequest(r.name),
+                  onTap: () => onApprove(r),
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
                     decoration: BoxDecoration(color: AppColors.olive, borderRadius: BorderRadius.circular(100)),
@@ -205,7 +292,7 @@ class _ApproveTab extends StatelessWidget {
                 ),
                 const SizedBox(width: 8),
                 GestureDetector(
-                  onTap: () => context.read<AppState>().declineFriendRequest(r.name),
+                  onTap: () => onDecline(r),
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
                     decoration: BoxDecoration(color: AppColors.bg2.withOpacity(0.4), borderRadius: BorderRadius.circular(100), border: Border.all(color: const Color(0x29F6F5EC))),
@@ -293,14 +380,14 @@ class _ManageTab extends StatelessWidget {
                     ),
                   ),
                   GestureDetector(
-                    onTap: () => context.read<AppState>().toggleFavoriteFriend(f.name),
+                    onTap: () => context.read<AppState>().toggleFavoriteFriend(f.id),
                     child: Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 6),
                       child: Text(f.favorited ? '★' : '☆', style: TextStyle(fontSize: 20, color: f.favorited ? AppColors.gold : AppColors.textSoft)),
                     ),
                   ),
                   GestureDetector(
-                    onTap: () => context.read<AppState>().removeFriend(f.name),
+                    onTap: () => context.read<AppState>().removeFriend(f.id),
                     child: Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 6),
                       child: Text('🗑️', style: AppFonts.inter(size: 15)),

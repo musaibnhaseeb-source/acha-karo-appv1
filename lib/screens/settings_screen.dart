@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../theme/app_theme.dart';
 import '../state/app_state.dart';
+import '../widgets/animated_wallpaper.dart';
 
 // Ported from the original's known settings sheet — text scale, sound, wallpaper color. Nothing
 // new decided here, same logic as already established earlier in this whole project.
@@ -43,7 +44,7 @@ class SettingsScreen extends StatelessWidget {
         title: Text('Delete account', style: AppFonts.fraunces(size: 16, weight: FontWeight.w600)),
         content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(
-            "This submits a request to our team — your account isn't deleted immediately. Let us know why you're leaving, if you're willing to share.",
+            "This submits a request to our team — your account isn't deleted immediately, and we'll action it within 24 hours. Let us know why you're leaving, if you're willing to share.",
             style: AppFonts.inter(size: 12, color: AppColors.textSoft, height: 1.4),
           ),
           const SizedBox(height: 14),
@@ -71,7 +72,7 @@ class SettingsScreen extends StatelessWidget {
               if (!ctx.mounted) return;
               Navigator.of(ctx).pop();
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text(error ?? "Request submitted — we'll be in touch.")),
+                SnackBar(content: Text(error ?? "Request submitted — we'll action this within 24 hours."), duration: const Duration(seconds: 5)),
               );
             },
             child: Text('Submit request', style: AppFonts.inter(size: 13, weight: FontWeight.w700, color: const Color(0xFFE39B84))),
@@ -94,9 +95,25 @@ class SettingsScreen extends StatelessWidget {
         title: Text('Settings', style: AppFonts.inter(size: 14, weight: FontWeight.w600)),
         centerTitle: true,
       ),
-      body: Container(
-        decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: wallpaperSwatches[context.watch<AppState>().wallpaperSwatchIndex])),
-        child: SafeArea(
+      // Same real bug fixed here as the other screens in this batch.
+      body: Stack(
+        // Real, genuine root-cause fix: Stack defaults to StackFit.loose, meaning it sizes
+        // itself to its non-Positioned child (SafeArea), which in turn sizes to its OWN content
+        // rather than filling available space. Every previous attempt only ever changed the
+        // background widget itself, never addressed this — the Positioned background was
+        // always being clipped down to match the Stack's own, content-sized bounds, regardless
+        // of what explicit size it was given. This forces the Stack itself to fill available
+        // space unconditionally, which is the actual fix.
+        fit: StackFit.expand,
+        children: [
+          Positioned(
+            top: 0,
+            left: 0,
+            width: MediaQuery.of(context).size.width,
+            height: MediaQuery.of(context).size.height,
+            child: AnimatedWallpaper(gradientColors: wallpaperSwatches[context.watch<AppState>().wallpaperSwatchIndex]),
+          ),
+        SafeArea(
           child: ListView(
             padding: const EdgeInsets.fromLTRB(18, 10, 18, 30),
             children: [
@@ -176,6 +193,7 @@ class SettingsScreen extends StatelessWidget {
             ],
           ),
         ),
+        ],
       ),
     );
   }

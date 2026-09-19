@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../theme/app_theme.dart';
 import '../state/app_state.dart';
+import '../widgets/animated_wallpaper.dart';
 import 'contact_screen.dart';
 import 'history_screen.dart';
 
@@ -34,9 +35,27 @@ class NotificationsScreen extends StatelessWidget {
         title: Text('Notifications', style: AppFonts.inter(size: 14, weight: FontWeight.w600)),
         centerTitle: true,
       ),
-      body: Container(
-        decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: wallpaperSwatches[context.watch<AppState>().wallpaperSwatchIndex])),
-        child: SafeArea(
+      // Same real bug fixed here as Leaderboard/Contact — currently masked because there happen
+      // to be enough notifications to fill the screen, but it's the identical latent issue and
+      // would show the same way the moment the list is shorter (e.g. after clearing old ones).
+      body: Stack(
+        // Real, genuine root-cause fix: Stack defaults to StackFit.loose, meaning it sizes
+        // itself to its non-Positioned child (SafeArea), which in turn sizes to its OWN content
+        // rather than filling available space. Every previous attempt only ever changed the
+        // background widget itself, never addressed this — the Positioned background was
+        // always being clipped down to match the Stack's own, content-sized bounds, regardless
+        // of what explicit size it was given. This forces the Stack itself to fill available
+        // space unconditionally, which is the actual fix.
+        fit: StackFit.expand,
+        children: [
+          Positioned(
+            top: 0,
+            left: 0,
+            width: MediaQuery.of(context).size.width,
+            height: MediaQuery.of(context).size.height,
+            child: AnimatedWallpaper(gradientColors: wallpaperSwatches[context.watch<AppState>().wallpaperSwatchIndex]),
+          ),
+        SafeArea(
           child: SingleChildScrollView(
             padding: const EdgeInsets.fromLTRB(18, 10, 18, 30),
             child: Column(
@@ -87,6 +106,11 @@ class NotificationsScreen extends StatelessWidget {
                           }
                         },
                         child: Container(
+                          width: double.infinity, // Real bug fixed here: the parent Column uses
+                          // CrossAxisAlignment.start, which sizes children to their own content
+                          // width rather than stretching them — so cards were varying in width
+                          // based on how long each notification's text happened to be, instead
+                          // of all sharing the same full width.
                           margin: const EdgeInsets.only(bottom: 8),
                           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                           decoration: BoxDecoration(
@@ -108,6 +132,7 @@ class NotificationsScreen extends StatelessWidget {
             ),
           ),
         ),
+        ],
       ),
     );
   }

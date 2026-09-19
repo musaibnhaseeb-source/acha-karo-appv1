@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../theme/app_theme.dart';
 import '../state/app_state.dart';
+import '../widgets/animated_wallpaper.dart';
 import '../data/deed_catalog.dart';
 import '../data/tiers.dart';
 import '../widgets/thank_you_animation.dart';
@@ -79,9 +80,27 @@ class _SimulatorScreenState extends State<SimulatorScreen> {
         title: Text('Simulator', style: AppFonts.inter(size: 14, weight: FontWeight.w600)),
         centerTitle: true,
       ),
-      body: Container(
-        decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: wallpaperSwatches[context.watch<AppState>().wallpaperSwatchIndex])),
-        child: SafeArea(
+      // Same background-fill fix as the other screens in this batch, for consistency — this
+      // screen is unreachable in the current build (removed from the Side Sheet), but keeping
+      // it correct in case it's ever re-enabled for testing later.
+      body: Stack(
+        // Real, genuine root-cause fix: Stack defaults to StackFit.loose, meaning it sizes
+        // itself to its non-Positioned child (SafeArea), which in turn sizes to its OWN content
+        // rather than filling available space. Every previous attempt only ever changed the
+        // background widget itself, never addressed this — the Positioned background was
+        // always being clipped down to match the Stack's own, content-sized bounds, regardless
+        // of what explicit size it was given. This forces the Stack itself to fill available
+        // space unconditionally, which is the actual fix.
+        fit: StackFit.expand,
+        children: [
+          Positioned(
+            top: 0,
+            left: 0,
+            width: MediaQuery.of(context).size.width,
+            height: MediaQuery.of(context).size.height,
+            child: AnimatedWallpaper(gradientColors: wallpaperSwatches[context.watch<AppState>().wallpaperSwatchIndex]),
+          ),
+        SafeArea(
           child: ListView(
             padding: const EdgeInsets.fromLTRB(18, 10, 18, 30),
             children: [
@@ -207,7 +226,7 @@ class _SimulatorScreenState extends State<SimulatorScreen> {
                         const SizedBox(height: 8),
                         ClipRRect(
                           borderRadius: BorderRadius.circular(10),
-                          child: Image.file(item.photoFile!, height: 140, width: double.infinity, fit: BoxFit.cover),
+                          child: Image.memory(item.photoFile!, height: 140, width: double.infinity, fit: BoxFit.cover),
                         ),
                       ] else if (item.photoUrl != null) ...[
                         // Real cross-session case — no local file (this device didn't submit
@@ -291,6 +310,7 @@ class _SimulatorScreenState extends State<SimulatorScreen> {
             ],
           ),
         ),
+        ],
       ),
     );
   }

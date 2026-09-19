@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../theme/app_theme.dart';
 import '../state/app_state.dart';
 import '../data/deed_catalog.dart';
@@ -9,10 +10,10 @@ import '../widgets/cooldowns_sheet.dart';
 import '../widgets/home_side_sheet.dart';
 import 'town_voice_screen.dart';
 import 'leaderboard_screen.dart';
-import 'badges_screen.dart';
 import 'campaign_detail_screen.dart';
 import '../widgets/campaign_icon.dart';
-import '../data/badges.dart';
+import '../widgets/big_tile.dart';
+import '../utils/youtube.dart';
 
 String _formatRemaining(Duration d) {
   final mins = (d.inSeconds / 60).ceil();
@@ -35,6 +36,14 @@ class _HomeScreenState extends State<HomeScreen> {
   String? openCategoryKey;
   final _scaffoldKey = GlobalKey<ScaffoldState>();
 
+  // New — real, direct video open for a teaser's YouTube button, same extraction logic already
+  // proven elsewhere (accepts either a full link or just the raw video id).
+  Future<void> _openTeaserVideo(String raw) async {
+    final videoId = extractYoutubeVideoId(raw);
+    if (videoId == null) return;
+    await launchUrl(Uri.parse('https://www.youtube.com/watch?v=$videoId'), mode: LaunchMode.externalApplication);
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = context.watch<AppState>();
@@ -55,7 +64,25 @@ class _HomeScreenState extends State<HomeScreen> {
         onTap: () {
           if (openCategoryKey != null) setState(() => openCategoryKey = null);
         },
-        child: SingleChildScrollView(
+        child: RefreshIndicator(
+          color: AppColors.gold,
+          backgroundColor: AppColors.bg2,
+          // Real gap addressed here — pull-to-refresh gives explicit, on-demand control over
+          // seeing updates (an approved deed, a new notification), pairing with the
+          // refresh-on-resume added in main.dart for the more automatic case.
+          // Real gap fixed here: this only re-ran tryLoadExistingProfile(), which never touches
+          // campaigns at all — loadRemoteConfig() (campaigns + Town Voice/app_config) was only
+          // ever called once, at cold app start. So a campaign disabled by an admin would keep
+          // showing indefinitely, surviving both pull-to-refresh and resume-from-background,
+          // until a full app restart happened to re-trigger that one-time load. Both real data
+          // sources refreshed together now, so "refresh" actually means what it says.
+          onRefresh: () => Future.wait([
+            context.read<AppState>().tryLoadExistingProfile(),
+            context.read<AppState>().loadRemoteConfig(),
+          ]),
+          child: SingleChildScrollView(
+      physics: const AlwaysScrollableScrollPhysics(), // required for RefreshIndicator's pull
+      // gesture to work even when content is shorter than the screen and wouldn't otherwise scroll
       padding: const EdgeInsets.fromLTRB(18, 6, 18, 90),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -63,7 +90,13 @@ class _HomeScreenState extends State<HomeScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('Day ${state.simDay} · Good afternoon', style: AppFonts.plexMono(size: 10.5)),
+              // Real gap fixed here — this was hardcoded "Good afternoon" verbatim from the
+              // original HTML design, which never actually made it time-based either. Now
+              // genuinely computed from the real clock. Also dropped "Day X" — that was always
+              // the simDay testing counter, meaningless to a real user and now stuck showing
+              // "Day 1" indefinitely since Simulator (the only thing that ever advanced it) is
+              // hidden for the pilot.
+              Text(_greeting(), style: AppFonts.plexMono(size: 10.5)),
               // Bell icon removed — redundant with Notifications already living in the Side
               // Sheet. The menu button (which opens that sheet) is the only entry point needed.
               GestureDetector(
@@ -88,7 +121,13 @@ class _HomeScreenState extends State<HomeScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(state.user.name.split(' ').first, style: AppFonts.fraunces(size: 22, weight: FontWeight.w600)),
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(state.user.name.split(' ').first, style: AppFonts.fraunces(size: 22, weight: FontWeight.w600)),
+                if (state.membershipNumber != null) ...[
+                  const SizedBox(height: 2),
+                  Text(state.membershipNumber!, style: AppFonts.plexMono(size: 9)),
+                ],
+              ]),
               Row(children: [
                 Text(tier.icon, style: const TextStyle(fontSize: 22)),
                 const SizedBox(width: 4),
@@ -128,7 +167,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 return GestureDetector(
                   onTap: () => setState(() => openCategoryKey = isActive ? null : cat.key),
                   child: Column(children: [
-                    _CategoryRing(icon: cat.icon, progress: pct, active: isActive, size: ringSize),
+                    _CategoryRing(icon: cat.icon, progress: pct, active: isActive, size: ringSize, greyedOut: state.isGlobalCooldownActive),
                     const SizedBox(height: 4),
                     Text(cat.short, style: AppFonts.plexMono(size: 9.5, weight: FontWeight.w600, color: AppColors.text)),
                   ]),
@@ -160,57 +199,113 @@ class _HomeScreenState extends State<HomeScreen> {
           // Only renders when a campaign's `active` field is true — proves the actual point of
           // this whole architecture: flipping that field (a database change) shows/hides this
           // with zero app update. Positioned right above Leaderboard, per the current design.
+          // Real fix here: resized to genuinely match Leaderboard's exact dimensions, using the
+          // same shared BigTile widget instead of a differently-sized custom container —
+          // customIcon used here since campaigns can have image/GIF icons via CampaignIcon, not
+          // just a simple text emoji.
           ...state.remoteConfig.activeCampaigns.map((c) => Padding(
                 padding: const EdgeInsets.only(bottom: 10),
-                child: GestureDetector(
-                  onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => CampaignDetailScreen(campaign: c))),
-                  child: Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(colors: [AppColors.gold.withOpacity(0.16), AppColors.oliveCard]),
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: AppColors.gold.withOpacity(0.3)),
+                child: Stack(children: [
+                  BigTile(
+                    customIcon: Container(
+                      width: 60, height: 60,
+                      decoration: BoxDecoration(shape: BoxShape.circle, color: AppColors.gold.withOpacity(0.18)),
+                      alignment: Alignment.center,
+                      child: CampaignIcon(icon: c.icon, size: 42),
                     ),
-                    child: Row(children: [
-                      Container(
-                        width: 44, height: 44,
-                        decoration: BoxDecoration(shape: BoxShape.circle, color: AppColors.gold.withOpacity(0.18)),
+                    name: c.title,
+                    description: c.description,
+                    onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => CampaignDetailScreen(campaign: c))),
+                  ),
+                  // New — real tick mark once this campaign's Hall of Fame is genuinely
+                  // claimed, per direction: an at-a-glance "you've finished this one" signal
+                  // without needing to open it.
+                  if (state.completedCampaignIds.contains(c.id))
+                    Positioned(
+                      top: 8, right: 8,
+                      child: Container(
+                        width: 22, height: 22,
+                        decoration: BoxDecoration(shape: BoxShape.circle, color: AppColors.gold, boxShadow: [BoxShadow(color: AppColors.gold.withOpacity(0.5), blurRadius: 6)]),
                         alignment: Alignment.center,
-                        child: CampaignIcon(icon: c.icon, size: 22),
+                        child: const Icon(Icons.check, size: 14, color: AppColors.inkOnGold),
                       ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                          Text(c.title, style: AppFonts.fraunces(size: 14.5, weight: FontWeight.w600)),
-                          Text(c.description, style: AppFonts.inter(size: 11, color: AppColors.textSoft)),
-                        ]),
+                    ),
+                ]),
+              )),
+          // New — real, per-campaign teaser cards, per direction: same exact BigTile design as
+          // the real campaign card, just non-tappable, for building excitement before a
+          // campaign is actually playable. Only shows for a campaign that hasn't gone active
+          // yet — the real card takes over automatically once it does.
+          ...state.remoteConfig.teaserCampaigns.map((c) => Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: Stack(children: [
+                  BigTile(
+                    customIcon: Container(
+                      width: 60, height: 60,
+                      decoration: BoxDecoration(shape: BoxShape.circle, color: AppColors.gold.withOpacity(0.18)),
+                      alignment: Alignment.center,
+                      child: CampaignIcon(icon: c.icon, size: 42),
+                    ),
+                    name: c.title,
+                    description: c.teaserDescription ?? 'Something is coming.',
+                    onTap: null,
+                  ),
+                  Positioned(
+                    top: 8, right: 8,
+                    child: Row(mainAxisSize: MainAxisSize.min, children: [
+                      // New — real YouTube button next to "Coming Soon", per direction: only
+                      // shown once a real video link actually exists in the database, opens it
+                      // directly on tap. Same exact padding and border radius as the pill next
+                      // to it, so both share identical height and a consistent size, rather
+                      // than the icon-only button ending up a mismatched shape.
+                      if (c.youtubeVideoId != null && c.youtubeVideoId!.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(right: 6),
+                          child: GestureDetector(
+                            onTap: () => _openTeaserVideo(c.youtubeVideoId!),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(color: const Color(0xFFFF0000), borderRadius: BorderRadius.circular(100)),
+                              child: const Icon(Icons.play_arrow_rounded, size: 12, color: Colors.white),
+                            ),
+                          ),
+                        ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(color: AppColors.bg1.withOpacity(0.6), borderRadius: BorderRadius.circular(100)),
+                        child: Text('COMING SOON', style: AppFonts.plexMono(size: 8, weight: FontWeight.w700, color: AppColors.gold)),
                       ),
-                      const Icon(Icons.chevron_right, color: AppColors.gold, size: 20),
                     ]),
                   ),
-                ),
+                ]),
               )),
-          _BigTile(
+          // Restored per direction — the intent was only to hide mock data, not the feature
+          // itself, and Leaderboard was working correctly before. Note this still ranks against
+          // otherUsers (mock rival accounts) since that's the only comparison data the app has —
+          // worth knowing this isn't a real cross-user ranking yet, but restoring it as-is per
+          // the explicit instruction to bring it back the way it was.
+          BigTile(
             icon: '👑',
             name: 'Leaderboard',
             description: 'You\'re ranked #$rank overall',
             onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const LeaderboardScreen())),
           ),
           const SizedBox(height: 10),
-          _BigTile(
-            icon: '🏅',
-            name: 'Badges',
-            description: '${state.user.badges.length} of ${badgeDefs.length} badges earned',
-            onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const BadgesScreen())),
-          ),
-          const SizedBox(height: 10),
-          _BigTile(
+          // Profile tile removed — it's a real bottom-nav tab now, not reached via a Home tile
+          // anymore. A tile here would just be a redundant, confusing second path to the same
+          // place. ProfileScreen itself untouched, still the real destination, just reached
+          // differently now (see main_tab_screen.dart).
+          //
+          // Badges tile also moved to Profile now, alongside Limited Edition Items and Skins —
+          // grouping achievement/collection content together in one place, per direction.
+          // BadgesScreen itself untouched.
+          BigTile(
             icon: '🎙️',
             name: 'Town Voice',
-            // Was showing "X is leading this week" — contradicted the page it opens, which now
-            // says launching soon. Kept consistent with what's actually behind the tile.
-            description: 'Launching soon',
+            // Now dynamic, matching whatever the page itself actually shows — real leader name
+            // when active, "Launching soon" when not, driven by the same app_config flag either
+            // way rather than a hardcoded string that could drift out of sync with the page again.
+            description: state.remoteConfig.townVoice.active ? '${state.townVoiceLeader.$1} is leading this week' : 'Launching soon',
             onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const TownVoiceScreen())),
           ),
           // Redeem tile removed for the pilot, per the current direction — no redemption system
@@ -220,12 +315,19 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       ),
       ),
+      ),
     );
   }
 
-  int _computeRank(AppState state) {
-    final all = [...otherUsers.map((u) => u.points), state.user.points]..sort((a, b) => b.compareTo(a));
-    return all.indexOf(state.user.points) + 1;
+  int _computeRank(AppState state) => state.myRank; // real data now, see AppState.myRank
+
+  String _greeting() {
+    final hour = DateTime.now().hour;
+    if (hour < 5) return 'Good night';
+    if (hour < 12) return 'Good morning';
+    if (hour < 17) return 'Good afternoon';
+    if (hour < 21) return 'Good evening';
+    return 'Good night';
   }
 
   void _openCooldownsSheet(BuildContext context) {
@@ -248,76 +350,41 @@ class _HomeScreenState extends State<HomeScreen> {
 // NOTE: Town Voice's holder name here is based on lifetime points — an honest interim
 // placeholder until real Mon–Sun weekly-window tracking is built (needs real timestamps on
 // deedsLog, not just the current `day` counter). Flagged clearly rather than presented as final.
-class _BigTile extends StatelessWidget {
-  final String icon;
-  final String name;
-  final String description;
-  final VoidCallback? onTap;
-  const _BigTile({required this.icon, required this.name, required this.description, this.onTap});
-
-  static const double _height = 92;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: double.infinity,
-        height: _height,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(colors: [AppColors.gold.withOpacity(0.12), AppColors.oliveCard]),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppColors.gold.withOpacity(0.28)),
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Text(icon, style: const TextStyle(fontSize: 42)),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(name, style: AppFonts.fraunces(size: 16, weight: FontWeight.w600), maxLines: 1, overflow: TextOverflow.ellipsis),
-                  const SizedBox(height: 3),
-                  Text(description, style: AppFonts.inter(size: 11, color: AppColors.textSoft), maxLines: 2, overflow: TextOverflow.ellipsis),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
+//
+// BigTile itself extracted to widgets/big_tile.dart so Profile can use the identical styling —
+// this comment block stays here since it documents Home's own tile usage/decisions above.
 
 class _CategoryRing extends StatelessWidget {
   final String icon;
   final double progress; // 0..1
   final bool active;
   final double size;
-  const _CategoryRing({required this.icon, required this.progress, required this.active, required this.size});
+  final bool greyedOut; // new — true while the global 15-min cooldown is active
+  const _CategoryRing({required this.icon, required this.progress, required this.active, required this.size, this.greyedOut = false});
   @override
   Widget build(BuildContext context) {
     final innerSize = size * 0.84;
     return SizedBox(
       width: size, height: size,
       child: Stack(alignment: Alignment.center, children: [
-        CustomPaint(size: Size(size, size), painter: _RingPainter(progress: progress)),
+        CustomPaint(size: Size(size, size), painter: _RingPainter(progress: progress, greyedOut: greyedOut)),
         Container(
           width: innerSize, height: innerSize,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            // Same vibrant gold-tinted gradient as the Town Voice/Redeem/Leaderboard tiles now,
-            // instead of the plain flat oliveCard fill — ring/progress logic (the CustomPaint
-            // arc above) is completely unchanged, only this inner circle's fill matches.
-            gradient: LinearGradient(colors: [AppColors.gold.withOpacity(0.12), AppColors.oliveCard]),
-            border: Border.all(color: active ? AppColors.gold : AppColors.bg2, width: 2),
+            // Deliberately desaturated while the global cooldown is active — a distinct,
+            // unambiguous "everything is locked right now" state, rather than looking like the
+            // normal gold-tinted ring just happened to fill up.
+            gradient: greyedOut
+                ? LinearGradient(colors: [AppColors.textSoft.withOpacity(0.08), AppColors.bg2.withOpacity(0.4)])
+                : LinearGradient(colors: [AppColors.gold.withOpacity(0.12), AppColors.oliveCard]),
+            border: Border.all(color: greyedOut ? AppColors.textSoft.withOpacity(0.3) : (active ? AppColors.gold : AppColors.bg2), width: 2),
           ),
           alignment: Alignment.center,
-          child: Text(icon, style: TextStyle(fontSize: size * 0.37)),
+          child: Opacity(
+            opacity: greyedOut ? 0.4 : 1.0,
+            child: Text(icon, style: TextStyle(fontSize: size * 0.37)),
+          ),
         ),
       ]),
     );
@@ -326,12 +393,18 @@ class _CategoryRing extends StatelessWidget {
 
 class _RingPainter extends CustomPainter {
   final double progress;
-  _RingPainter({required this.progress});
+  final bool greyedOut;
+  _RingPainter({required this.progress, this.greyedOut = false});
   @override
   void paint(Canvas canvas, Size size) {
-    if (progress <= 0) return;
+    // Real fix here: during global cooldown, every category's progress becomes 1.0
+    // simultaneously (everything is locked at once), so a full ring was being drawn around every
+    // icon on top of the already-desaturated inner circle — two overlapping "locked" treatments
+    // at once, which is exactly the uneven look. The inner circle alone communicates this
+    // clearly; the ring is redundant noise specifically in this state.
+    if (progress <= 0 || greyedOut) return;
     final paint = Paint()
-      ..color = AppColors.gold
+      ..color = greyedOut ? AppColors.textSoft.withOpacity(0.35) : AppColors.gold
       ..strokeWidth = 4
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.butt;
@@ -340,7 +413,7 @@ class _RingPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _RingPainter oldDelegate) => oldDelegate.progress != progress;
+  bool shouldRepaint(covariant _RingPainter oldDelegate) => oldDelegate.progress != progress || oldDelegate.greyedOut != greyedOut;
 }
 
 class _CooldownButton extends StatelessWidget {

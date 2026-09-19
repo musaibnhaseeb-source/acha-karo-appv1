@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../theme/app_theme.dart';
 import '../widgets/labeled_text_field.dart';
+import '../widgets/terms_sheet.dart';
 
 // Real email OTP sign-in — the only sign-in method for MVP. Google Sign-In was removed
 // (previously just a non-functional mock button) since it's not needed given this app isn't
@@ -18,6 +19,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final emailController = TextEditingController();
   bool sending = false;
   String? error;
+  bool agreedToTerms = false; // new — real, explicit acknowledgment required before signup
 
   @override
   void dispose() {
@@ -29,6 +31,12 @@ class _LoginScreenState extends State<LoginScreen> {
     final email = emailController.text.trim();
     if (email.isEmpty || !email.contains('@')) {
       setState(() => error = 'Enter a valid email address.');
+      return;
+    }
+    // New — real, required check, not just implied by continuing. Matches the T&Cs document's
+    // own "By selecting I Agree..." language directly.
+    if (!agreedToTerms) {
+      setState(() => error = 'Please agree to the Terms & Conditions to continue.');
       return;
     }
     setState(() {
@@ -69,6 +77,14 @@ class _LoginScreenState extends State<LoginScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // Real fix here: this logo was genuinely dropped somewhere along the way and
+                // never restored — confirmed there was no image reference here at all, just the
+                // text. Sized compact, sitting directly above the wordmark, matching "top left."
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(10),
+                  child: Image.asset('assets/images/logo.jpeg', width: 44, height: 44, fit: BoxFit.cover),
+                ),
+                const SizedBox(height: 8),
                 Text('Acha Karo', style: AppFonts.fraunces(size: 19, weight: FontWeight.w700, color: AppColors.gold)),
                 const SizedBox(height: 2),
                 Text('DO GOOD, GET SEEN', style: AppFonts.plexMono(size: 9, color: AppColors.textSoft)),
@@ -87,7 +103,37 @@ class _LoginScreenState extends State<LoginScreen> {
                   keyboardType: TextInputType.emailAddress,
                   errorText: error,
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 16),
+                // New — real, explicit acknowledgment, replacing the old "just informational
+                // text" approach with an actual required checkbox, per direction. Built with a
+                // plain GestureDetector around just the link text rather than
+                // RichText+TapGestureRecognizer — avoids both an extra import and the real
+                // lifecycle-management risk of creating a new recognizer inline on every build.
+                GestureDetector(
+                  onTap: () => setState(() => agreedToTerms = !agreedToTerms),
+                  child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Checkbox(
+                      value: agreedToTerms,
+                      onChanged: (v) => setState(() => agreedToTerms = v ?? false),
+                      activeColor: AppColors.gold,
+                      side: const BorderSide(color: AppColors.textSoft),
+                    ),
+                    Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.only(top: 14),
+                        child: Wrap(children: [
+                          Text('I have read and agree to the ', style: AppFonts.inter(size: 11.5, color: AppColors.textSoft, height: 1.5)),
+                          GestureDetector(
+                            onTap: () => showTermsAndConditions(context),
+                            child: Text('Terms & Conditions', style: AppFonts.inter(size: 11.5, color: AppColors.gold, weight: FontWeight.w700).copyWith(decoration: TextDecoration.underline)),
+                          ),
+                          Text('.', style: AppFonts.inter(size: 11.5, color: AppColors.textSoft)),
+                        ]),
+                      ),
+                    ),
+                  ]),
+                ),
+                const SizedBox(height: 12),
                 _PrimaryButton(label: sending ? 'Sending…' : 'Send code', onTap: sending ? null : _sendCode),
                 const SizedBox(height: 10),
                 Text(

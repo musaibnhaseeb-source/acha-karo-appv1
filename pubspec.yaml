@@ -15,13 +15,18 @@ dependencies:
   geolocator: ^12.0.0        # native GPS capture (photo mode flagging logic)
   provider: ^6.1.2           # app-wide state, analogous to the useAppState() hook in the Next.js port
   supabase_flutter: ^2.5.0  # if flutter pub get fails mentioning "publishableKey" instead of
-                              # "anonKey", that's Supabase's own recent parameter rename — one
-                              # line to fix in lib/main.dart, tell me and I'll adjust it
+                             # "anonKey", that's Supabase's own recent parameter rename — one
+                             # line to fix in lib/main.dart, tell me and I'll adjust it
   url_launcher: ^6.3.0      # opens campaign YouTube videos externally — youtube_player_flutter
-                              # (in-app playback) was removed: it depends on flutter_inappwebview,
-                              # which has a currently-unresolved upstream bug breaking the Android
-                              # build entirely on newer build tools. Not worth the risk for MVP.
-  permission_handler: ^11.4.4  # Runtime permissions for camera, location, storage
+                             # (in-app playback) was removed: it depends on flutter_inappwebview,
+                             # which has a currently-unresolved upstream bug breaking the Android
+                             # build entirely on newer build tools. Not worth the risk for MVP.
+  gal: ^2.3.0                # New — real "save to device gallery" for sticker downloads. This is
+                             # a genuinely new capability, not something achievable with what was
+                             # already in the project — no built-in Dart/Flutter way to write to
+                             # the platform's media gallery exists without real native code,
+                             # which is what this package provides. Worth extra care on first
+                             # real test, same as every other "first" package in this project.
 
 dev_dependencies:
   flutter_test:
@@ -29,8 +34,14 @@ dev_dependencies:
   flutter_lints: ^4.0.0
   flutter_launcher_icons: ^0.13.1  # generates every required icon size from one image you provide
   flutter_native_splash: ^2.4.1    # generates the real native launch screen (background color +
-                                      # logo) from the config below — replaces Flutter's default
-                                      # white screen shown before Flutter itself has loaded
+                                     # logo) from the config below — replaces Flutter's default
+                                     # white screen shown before Flutter itself has loaded
+  flutter_local_notifications: ^17.2.3  # shows a real system notification (with sound) when a
+                                          # new one arrives, and handles the Android 13+
+                                          # permission request — new to this project, so worth
+                                          # extra care on first real test
+  permission_handler: ^11.3.1       # simpler, focused permission-request path specifically —
+                                      # used just for the POST_NOTIFICATIONS prompt itself
 
 flutter_launcher_icons:
   android: true
@@ -39,7 +50,7 @@ flutter_launcher_icons:
 
 flutter_native_splash:
   color: "#081209"          # matches AppColors.bg1 — same dark background the app itself uses,
-                              # not the default white
+                             # not the default white
   image: "assets/splash/logo.png"
   android_12:                # Android 12+ uses a different splash API, needs its own config —
     color: "#081209"         # same dark color, kept consistent
@@ -47,5 +58,8 @@ flutter_native_splash:
 flutter:
   uses-material-design: true
   assets:
-    - assets/icon/
-    - assets/splash/
+    # New — first bundled in-app image asset. The app icon/splash were already handled by a
+    # separate mechanism (flutter_launcher_icons/flutter_native_splash), but this is genuinely
+    # different: this is a real, regular bundled image shown inside a normal screen, which
+    # needed a proper assets declaration that never existed before.
+    - assets/images/

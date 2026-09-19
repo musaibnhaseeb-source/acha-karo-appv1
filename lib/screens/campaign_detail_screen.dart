@@ -1,11 +1,14 @@
-import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../theme/app_theme.dart';
+import '../state/app_state.dart';
 import '../data/remote_config.dart';
-import '../data/deed_catalog.dart';
 import '../widgets/campaign_icon.dart';
-import '../widgets/submit_deed_flow.dart';
+import '../widgets/animated_wallpaper.dart';
+import '../widgets/flip_card.dart';
+import '../utils/youtube.dart';
+import 'roadmap_screen.dart';
 
 // New screen — tapping the campaign card on Home opens this. Hosts a real flip card (front:
 // campaign intro; back: YouTube link + CTA + running dates), everything on it driven by the
@@ -26,9 +29,28 @@ class CampaignDetailScreen extends StatelessWidget {
         title: Text(campaign.title, style: AppFonts.inter(size: 14, weight: FontWeight.w600)),
         centerTitle: true,
       ),
-      body: Container(
-        decoration: const BoxDecoration(gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [AppColors.bg2, AppColors.bg1])),
-        child: SafeArea(
+      // Two real bugs fixed here: same background-fill issue as the other screens in this
+      // batch, plus this was using a hardcoded gradient instead of reacting to the wallpaper
+      // setting like every other screen does — same category of oversight as the Side Sheet fix
+      // from an earlier batch, just never caught on this specific screen until now.
+      body: Stack(
+        // Real, genuine root-cause fix: Stack defaults to StackFit.loose, meaning it sizes
+        // itself to its non-Positioned child (SafeArea), which in turn sizes to its OWN content
+        // rather than filling available space. Every previous attempt only ever changed the
+        // background widget itself, never addressed this — the Positioned background was
+        // always being clipped down to match the Stack's own, content-sized bounds, regardless
+        // of what explicit size it was given. This forces the Stack itself to fill available
+        // space unconditionally, which is the actual fix.
+        fit: StackFit.expand,
+        children: [
+          Positioned(
+            top: 0,
+            left: 0,
+            width: MediaQuery.of(context).size.width,
+            height: MediaQuery.of(context).size.height,
+            child: AnimatedWallpaper(gradientColors: wallpaperSwatches[context.watch<AppState>().wallpaperSwatchIndex]),
+          ),
+        SafeArea(
           child: SingleChildScrollView(
             padding: const EdgeInsets.fromLTRB(18, 10, 18, 30),
             child: Column(
@@ -36,7 +58,7 @@ class CampaignDetailScreen extends StatelessWidget {
               children: [
                 Text('Tap the card to flip it', style: AppFonts.inter(size: 11.5, color: AppColors.textSoft)),
                 const SizedBox(height: 12),
-                _FlipCard(
+                FlipCard(
                   front: _CardFront(campaign: campaign),
                   back: _CardBack(campaign: campaign),
                 ),
@@ -62,6 +84,7 @@ class CampaignDetailScreen extends StatelessWidget {
             ),
           ),
         ),
+        ],
       ),
     );
   }
@@ -74,7 +97,11 @@ class _CardFront extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      height: 320,
+      // Real fix here: front and back previously had different heights (front fixed at 320,
+      // back allowed to grow taller for its extra content), causing a visible size jump during
+      // the flip. Both sides now share one fixed height, genuinely closer to full-screen —
+      // T&Cs added below to both sides so the front doesn't just look sparse with empty space.
+      height: 480,
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
         gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [AppColors.gold.withOpacity(0.22), AppColors.oliveCard]),
@@ -91,6 +118,26 @@ class _CardFront extends StatelessWidget {
           Text(campaign.description, textAlign: TextAlign.center, style: AppFonts.inter(size: 12.5, color: AppColors.textSoft, height: 1.5)),
           const SizedBox(height: 20),
           Text('👆 Tap to flip', style: AppFonts.plexMono(size: 10, color: AppColors.gold)),
+          const Spacer(),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(color: AppColors.bg1.withOpacity(0.3), borderRadius: BorderRadius.circular(12), border: Border.all(color: const Color(0x1FF6F5EC))),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('TERMS & CONDITIONS', style: AppFonts.plexMono(size: 9.5, color: AppColors.textSoft).copyWith(letterSpacing: 0.5)),
+              const SizedBox(height: 6),
+              Text(
+                // Real fix here: this front-side teaser was left hardcoded when the back side
+                // became database-driven — always said "placeholder" even for a campaign with
+                // genuine, real terms set. Now reflects the same real/placeholder status as the
+                // back, just condensed rather than showing the full text twice.
+                campaign.termsAndConditions != null
+                    ? 'Real terms apply to this campaign. Full terms on the back of this card.'
+                    : 'Placeholder — real terms to be added. Full terms on the back of this card.',
+                style: AppFonts.inter(size: 10.5, color: AppColors.textSoft, height: 1.5),
+              ),
+            ]),
+          ),
         ],
       ),
     );
@@ -113,8 +160,15 @@ class _CardBack extends StatelessWidget {
   }
 
   Future<void> _openVideo(BuildContext context) async {
-    final videoId = campaign.youtubeVideoId;
-    if (videoId == null || videoId.isEmpty) return;
+    final raw = campaign.youtubeVideoId;
+    if (raw == null || raw.isEmpty) return;
+    final videoId = extractYoutubeVideoId(raw);
+    if (videoId == null) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Couldn't recognize this campaign's video link — check it in Supabase.")));
+      }
+      return;
+    }
     final uri = Uri.parse('https://www.youtube.com/watch?v=$videoId');
     final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
     if (!opened && context.mounted) {
@@ -122,70 +176,27 @@ class _CardBack extends StatelessWidget {
     }
   }
 
-  // The CTA's actual behavior — one quick, low-friction deed per category (whichever is worth
-  // the fewest points, i.e. fastest/easiest), so someone reading about a campaign can act on it
-  // immediately without hunting through all 32 deed types on Home. Tapping any of these opens
-  // openSubmitDeedFlow — the exact same real flow as a normal submission (GPS, moderation,
-  // cooldowns, age-related rules already enforced app-wide at sign-up), nothing bypassed or
-  // specially relaxed just because it started from a campaign.
-  void _showQuickActions(BuildContext context) {
-    final lowest = lowestPointDeedPerCategory();
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: AppColors.bg2,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-      builder: (sheetContext) => Padding(
-        padding: const EdgeInsets.fromLTRB(20, 20, 20, 30),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Quick actions', style: AppFonts.fraunces(size: 16, weight: FontWeight.w600)),
-            const SizedBox(height: 4),
-            Text('The fastest deed in each category — one tap to get started.', style: AppFonts.inter(size: 11.5, color: AppColors.textSoft)),
-            const SizedBox(height: 16),
-            ...categoryDefs.map((cat) {
-              final type = lowest[cat.key];
-              if (type == null) return const SizedBox.shrink();
-              final meta = deedCatalog[type]!;
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: GestureDetector(
-                  onTap: () {
-                    Navigator.of(sheetContext).pop();
-                    openSubmitDeedFlow(context, type);
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                    decoration: BoxDecoration(color: AppColors.oliveCard, borderRadius: BorderRadius.circular(12), border: Border.all(color: const Color(0x29F6F5EC))),
-                    child: Row(children: [
-                      Text(meta.icon, style: const TextStyle(fontSize: 18)),
-                      const SizedBox(width: 10),
-                      Expanded(child: Text(meta.name, style: AppFonts.inter(size: 12.5, weight: FontWeight.w600))),
-                      Text('+${meta.points} pts', style: AppFonts.plexMono(size: 10.5, color: AppColors.textSoft)),
-                    ]),
-                  ),
-                ),
-              );
-            }),
-          ],
-        ),
-      ),
-    );
-  }
+  // Relocated to roadmap_screen.dart — the CTA now opens the Roadmap directly, and this same
+  // "quick, easy deed" concept lives there instead, now offering real choice (3 per category)
+  // rather than a single pick. Removed from here rather than left as dead code.
 
   @override
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      constraints: const BoxConstraints(minHeight: 320),
+      // Real fix here: matches _CardFront's fixed height exactly now, instead of the old
+      // minHeight (which let this side grow taller and caused the visible jump during the flip).
+      // Content wrapped in its own scroll view, since fixing the height means genuinely long
+      // content (a long T&Cs block) needs somewhere safe to go rather than overflowing.
+      height: 480,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: AppColors.oliveCard,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: AppColors.gold.withOpacity(0.35)),
       ),
-      child: Column(
+      child: SingleChildScrollView(
+        child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -219,9 +230,12 @@ class _CardBack extends StatelessWidget {
           if (campaign.ctaLabel != null)
             GestureDetector(
               // Real behavior now — was just a "would open" placeholder before. Opens the same
-              // quick-action sheet regardless of ctaLink; that field is no longer used for this
-              // button (kept in the schema for now in case it's wanted for something else later).
-              onTap: () => _showQuickActions(context),
+              // Real behavior changed here — CTA now opens the Roadmap directly, per the current
+              // testing phase. The quick-actions task-list concept isn't removed, just relocated
+              // onto the Roadmap screen itself (see roadmap_screen.dart), where it now serves the
+              // same purpose — a fast way to log a real deed — from a more natural point in the
+              // flow. ctaLink still unused (kept in the schema in case it's wanted later).
+              onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => RoadmapScreen(campaign: campaign))),
               child: Container(
                 width: double.infinity,
                 padding: const EdgeInsets.symmetric(vertical: 13),
@@ -236,65 +250,29 @@ class _CardBack extends StatelessWidget {
             const SizedBox(width: 6),
             Text(_formatDateRange(), style: AppFonts.plexMono(size: 11, color: AppColors.textSoft)),
           ]),
+          const SizedBox(height: 18),
+          // New — fills the remaining space at the bottom of shorter campaign cards, which
+          // pragmatically addresses the black-gap issue for this specific screen regardless of
+          // whatever the underlying system-level cause turns out to be. Placeholder legal text
+          // for now — real copy to be provided.
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(color: AppColors.bg1.withOpacity(0.3), borderRadius: BorderRadius.circular(12), border: Border.all(color: const Color(0x1FF6F5EC))),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('TERMS & CONDITIONS', style: AppFonts.plexMono(size: 9.5, color: AppColors.textSoft).copyWith(letterSpacing: 0.5)),
+              const SizedBox(height: 8),
+              // Real fix here: now genuinely database-driven, per-campaign content — falls back
+              // to the same honest placeholder if a campaign hasn't set real terms yet.
+              Text(
+                campaign.termsAndConditions ??
+                    'Placeholder — real terms to be added. Participation in this campaign and any associated rewards are subject to Acha Karo\'s standard terms of use. Rewards, if any, are not guaranteed and are awarded at the sole discretion of the platform. Campaign dates and rewards may change without notice.',
+                style: AppFonts.inter(size: 11, color: AppColors.textSoft, height: 1.6),
+              ),
+            ]),
+          ),
         ],
-      ),
-    );
-  }
-}
-
-// Real 3D flip using core Flutter Transform/Matrix4 — no extra package needed for this part.
-class _FlipCard extends StatefulWidget {
-  final Widget front;
-  final Widget back;
-  const _FlipCard({required this.front, required this.back});
-  @override
-  State<_FlipCard> createState() => _FlipCardState();
-}
-
-class _FlipCardState extends State<_FlipCard> with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
-  bool _showFront = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(vsync: this, duration: const Duration(milliseconds: 500));
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  void _flip() {
-    if (_controller.isAnimating) return;
-    if (_showFront) {
-      _controller.forward();
-    } else {
-      _controller.reverse();
-    }
-    _showFront = !_showFront;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: _flip,
-      child: AnimatedBuilder(
-        animation: _controller,
-        builder: (context, child) {
-          final angle = _controller.value * pi;
-          final isBack = angle > pi / 2;
-          final displayAngle = isBack ? angle - pi : angle;
-          return Transform(
-            alignment: Alignment.center,
-            transform: Matrix4.identity()
-              ..setEntry(3, 2, 0.0015)
-              ..rotateY(displayAngle),
-            child: isBack ? widget.back : widget.front,
-          );
-        },
+        ),
       ),
     );
   }

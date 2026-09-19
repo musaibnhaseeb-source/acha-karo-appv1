@@ -103,7 +103,13 @@ class _EditProfileSheetState extends State<EditProfileSheet> {
           decoration: const BoxDecoration(color: AppColors.bg2, borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
           child: SingleChildScrollView(
             controller: scrollController,
-            padding: const EdgeInsets.fromLTRB(20, 20, 20, 30),
+            // Real bug fixed here: this never accounted for the keyboard's height at all, so
+            // tapping into Name/Phone/Email (near the bottom of the sheet) would let the
+            // keyboard simply cover them instead of the sheet's content shifting to stay
+            // visible. MediaQuery's viewInsets.bottom is exactly the keyboard's current height
+            // (0 when it's closed) — adding it to the bottom padding keeps whatever's focused
+            // reachable above the keyboard instead of hidden behind it.
+            padding: EdgeInsets.fromLTRB(20, 20, 20, 30 + MediaQuery.of(context).viewInsets.bottom),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [

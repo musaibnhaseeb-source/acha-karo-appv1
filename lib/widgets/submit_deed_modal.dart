@@ -1,4 +1,4 @@
-import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
@@ -14,13 +14,19 @@ import '../data/deed_form_fields.dart';
 // receipt") and are always sent to a moderator, same rule enforced in AppState.
 class SubmitDeedModal extends StatefulWidget {
   final String type;
-  const SubmitDeedModal({super.key, required this.type});
+  final String? campaignId; // new — tags the resulting deed so campaign-specific roadmap
+  // progress can be counted correctly, especially when multiple campaigns run simultaneously
+  const SubmitDeedModal({super.key, required this.type, this.campaignId});
   @override
   State<SubmitDeedModal> createState() => _SubmitDeedModalState();
 }
 
 class _SubmitDeedModalState extends State<SubmitDeedModal> {
-  File? photoFile;
+  // Bytes, not dart:io File — File has no working implementation on Flutter web, so a photo
+  // picked there would silently fail to preview or upload. XFile.readAsBytes() is the one
+  // picker API that's actually cross-platform.
+  Uint8List? photoBytes;
+  String? photoFileName;
   final Map<String, String> details = {};
   bool submitting = false;
 
@@ -49,13 +55,16 @@ class _SubmitDeedModalState extends State<SubmitDeedModal> {
       maxHeight: 800,
       imageQuality: 70,
     );
-    if (picked != null) setState(() => photoFile = File(picked.path));
+    if (picked != null) {
+      final bytes = await picked.readAsBytes();
+      if (mounted) setState(() { photoBytes = bytes; photoFileName = picked.name; });
+    }
   }
 
   Future<void> _handleSubmit() async {
     setState(() => submitting = true);
     final appState = context.read<AppState>();
-    final result = await appState.submitPhotoDeed(widget.type, details, photoFile: photoFile);
+    final result = await appState.submitPhotoDeed(widget.type, details, photoBytes: photoBytes, photoFileName: photoFileName, campaignId: widget.campaignId);
     if (mounted) Navigator.of(context).pop(result);
   }
 
@@ -66,7 +75,7 @@ class _SubmitDeedModalState extends State<SubmitDeedModal> {
     final fields = deedFormFields[widget.type] ?? [];
     final isDonation = donationDeedTypes.contains(widget.type);
     final fieldsFilled = fields.every((f) => (details[f.id] ?? '').isNotEmpty);
-    final valid = photoFile != null && fieldsFilled && !submitting;
+    final valid = photoBytes != null && fieldsFilled && !submitting;
 
     return DraggableScrollableSheet(
       initialChildSize: 0.75,
@@ -110,16 +119,16 @@ class _SubmitDeedModalState extends State<SubmitDeedModal> {
                         color: AppColors.oliveCard,
                         borderRadius: BorderRadius.circular(14),
                         border: Border.all(color: const Color(0x33F6F5EC)),
-                        image: photoFile != null ? DecorationImage(image: FileImage(photoFile!), fit: BoxFit.cover) : null,
+                        image: photoBytes != null ? DecorationImage(image: MemoryImage(photoBytes!), fit: BoxFit.cover) : null,
                       ),
                       alignment: Alignment.center,
-                      child: photoFile == null ? Text('📷', style: AppFonts.inter(size: 26)) : null,
+                      child: photoBytes == null ? Text('📷', style: AppFonts.inter(size: 26)) : null,
                     ),
                   ),
                   const SizedBox(width: 14),
                   Expanded(
                     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Text(photoFile == null ? 'Add a photo' : 'Tap to change photo', style: AppFonts.inter(size: 12.5, weight: FontWeight.w600)),
+                      Text(photoBytes == null ? 'Add a photo' : 'Tap to change photo', style: AppFonts.inter(size: 12.5, weight: FontWeight.w600)),
                       const SizedBox(height: 4),
                       Text(
                         isDonation

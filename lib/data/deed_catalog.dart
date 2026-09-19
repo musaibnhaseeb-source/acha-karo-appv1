@@ -88,3 +88,29 @@ Map<String, String> lowestPointDeedPerCategory() {
   });
   return result;
 }
+
+// Donation-category deeds always go to moderation, regardless of GPS/repeat status — a photo of
+// food or a receipt needs a human to actually confirm, unlike e.g. litter clean-up where the
+// photo is usually self-evident. Moved here from app_state.dart specifically so
+// easiestDeedsPerCategory() below can reference it without creating a circular import
+// (app_state.dart already imports FROM this file).
+const Set<String> donationDeedTypes = {
+  'donateSupplies', 'shareMeal', 'donateBooks', 'donateBlood', 'donateFirstAid', 'donateMedicines',
+};
+
+// New — 3 easiest (lowest-point) deed types per category, excluding donation types entirely.
+// Powers the roadmap's task-selection sheet, which relocated from the campaign CTA's earlier
+// single-lowest-per-category version (lowestPointDeedPerCategory above, kept as-is since nothing
+// else was asked to change there) — same idea, expanded to give real choice within each
+// category. Donation types excluded since they always require moderation review, at odds with
+// "quick, easy roadmap progress."
+Map<String, List<String>> easiestDeedsPerCategory({int perCategory = 3}) {
+  final result = <String, List<String>>{};
+  for (final cat in categoryDefs) {
+    final types = deedCatalog.entries.where((e) => e.value.category == cat.key && !donationDeedTypes.contains(e.key)).toList()
+      ..sort((a, b) => a.value.points.compareTo(b.value.points));
+    result[cat.key] = types.take(perCategory).map((e) => e.key).toList();
+  }
+  return result;
+}
+

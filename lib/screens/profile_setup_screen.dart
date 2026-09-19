@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../theme/app_theme.dart';
 import '../widgets/avatar_picker.dart';
 import '../widgets/labeled_text_field.dart';
@@ -11,7 +12,6 @@ typedef SetupCompleteCallback = void Function({
   required String city,
   String? phone,
   File? avatarFile,
-  String? inviteCode,
 });
 
 int? _calcAge(DateTime? dob) {
@@ -34,7 +34,6 @@ class ProfileSetupScreen extends StatefulWidget {
 class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
   final nameController = TextEditingController();
   final phoneController = TextEditingController();
-  final inviteCodeController = TextEditingController();
   String? gender;
   DateTime? dob;
   String city = 'Islamabad';
@@ -57,13 +56,37 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
     // Fixed while already touching this class.
     nameController.dispose();
     phoneController.dispose();
-    inviteCodeController.dispose();
     super.dispose();
   }
 
   bool get valid {
     final age = _calcAge(dob);
     return nameController.text.trim().isNotEmpty && gender != null && dob != null && age != null && age >= 14;
+  }
+
+  void _confirmAbandonSetup(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.bg2,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        title: Text('Abandon setup?', style: AppFonts.fraunces(size: 16, weight: FontWeight.w600)),
+        content: Text("You'll be signed out, and will need to sign in again to try setup once more.", style: AppFonts.inter(size: 12.5, color: AppColors.textSoft)),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(ctx).pop(), child: Text('Stay', style: AppFonts.inter(size: 13, color: AppColors.textSoft))),
+          TextButton(
+            onPressed: () async {
+              Navigator.of(ctx).pop();
+              // RootScreen's auth-state listener (in main.dart) handles clearing local state and
+              // navigating back to Login once this fires — same proven mechanism as Settings'
+              // sign-out, nothing else needed here.
+              await Supabase.instance.client.auth.signOut();
+            },
+            child: Text('Abandon', style: AppFonts.inter(size: 13, weight: FontWeight.w700, color: const Color(0xFFE39B84))),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -73,6 +96,16 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // New — real bug fixed here: there was no way to abandon this screen at all. Someone
+          // signed up with the wrong email, or who just wanted to back out, had no path except
+          // force-closing the app. This reuses the same sign-out mechanism already proven in
+          // Settings — the person is already authenticated at this point (OTP already verified),
+          // so "back" here genuinely means abandoning the signup, not stepping to a prior screen.
+          GestureDetector(
+            onTap: () => _confirmAbandonSetup(context),
+            child: const Icon(Icons.arrow_back, color: AppColors.text, size: 22),
+          ),
+          const SizedBox(height: 16),
           Text('ONE LAST STEP', style: AppFonts.plexMono(size: 10)),
           const SizedBox(height: 6),
           Text('Tell us who you are', style: AppFonts.fraunces(size: 22, weight: FontWeight.w600)),
@@ -128,7 +161,11 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                     ),
                   ),
                 ]),
-                const SizedBox(height: 8),
+                // Real bug fixed here: _label() already has its own 8px bottom padding built
+                // in (used correctly, alone, by Gender's column). This extra SizedBox added a
+                // SECOND 8px gap on top of that same padding, only on this side — giving DOB
+                // double the spacing Gender had before its control, which is exactly why the
+                // date box sat lower than the dropdown instead of lining up with it.
                 GestureDetector(
                   onTap: () async {
                     final now = DateTime.now();
@@ -192,13 +229,6 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
           ),
           const SizedBox(height: 14),
 
-          // Invite code field hidden for the pilot — Friends is parked as MVP2, so there's no
-          // reachable way to generate a link to paste here anymore; showing this field would
-          // just be confusing. Controller/dispose/onComplete wiring below all left untouched —
-          // harmless to leave in place, and this comes back with one field re-added once Friends
-          // does.
-          const SizedBox(height: 8),
-
           GestureDetector(
             onTap: valid
                 ? () => widget.onComplete(
@@ -208,7 +238,6 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                       city: city,
                       phone: phoneController.text.trim().isEmpty ? null : phoneController.text.trim(),
                       avatarFile: photoFile,
-                      inviteCode: inviteCodeController.text.trim().isEmpty ? null : inviteCodeController.text.trim(),
                     )
                 : null,
             child: Container(

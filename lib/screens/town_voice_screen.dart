@@ -1,18 +1,41 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../theme/app_theme.dart';
 import '../state/app_state.dart';
+import '../widgets/animated_wallpaper.dart';
+import '../utils/youtube.dart';
 
-// Simplified for the pilot per the current direction — the full leader card / date-time /
-// notify-calendar-YouTube UI still exists in the project's history and can come back once
-// there's a real audience worth streaming to. Showing an honest "give us time to grow" message
-// is more useful right now than a fully-built feature with no one watching it yet.
+// Rebuilt for real, replacing the earlier "launching soon" placeholder — controlled entirely by
+// app_config.town_voice_active now (see town_voice_activation.sql), no code change needed to
+// flip it on/off, same pattern already established for campaigns. Real leader data (via
+// state.townVoiceLeader, itself fixed to use real accounts rather than mock ones in this same
+// batch) — no synthetic data anywhere. Past Town Voices intentionally shows genuinely empty
+// rather than the original design's hardcoded example winners, since there's no real database
+// tracking of actual past winners yet — matches the "blank until real" principle already used
+// elsewhere in this project (the heatmap → city chart, deed locations, etc.) rather than
+// introducing fake data.
 class TownVoiceScreen extends StatelessWidget {
   const TownVoiceScreen({super.key});
+
+  Future<void> _watchOnYoutube(BuildContext context, String rawUrl) async {
+    final videoId = extractYoutubeVideoId(rawUrl);
+    if (videoId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Couldn't recognize this stream link — check it in Supabase.")));
+      return;
+    }
+    final uri = Uri.parse('https://www.youtube.com/watch?v=$videoId');
+    final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!opened && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not open the stream.')));
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final state = context.watch<AppState>();
+    final tv = state.remoteConfig.townVoice;
+
     return Scaffold(
       backgroundColor: Colors.transparent,
       appBar: AppBar(
@@ -22,30 +45,168 @@ class TownVoiceScreen extends StatelessWidget {
         title: Text('Town Voice', style: AppFonts.inter(size: 14, weight: FontWeight.w600)),
         centerTitle: true,
       ),
-      body: Container(
-        decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: wallpaperSwatches[state.wallpaperSwatchIndex])),
-        child: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.all(28),
-            child: Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Text('🎙️', style: TextStyle(fontSize: 48)),
-                  const SizedBox(height: 20),
-                  Text('Launching soon', style: AppFonts.fraunces(size: 20, weight: FontWeight.w600), textAlign: TextAlign.center),
-                  const SizedBox(height: 12),
-                  Text(
-                    "We're giving ourselves time to accumulate real users first — so when Town Voice launches, you'll actually have a meaningful audience, and your time will be worth it.",
-                    textAlign: TextAlign.center,
-                    style: AppFonts.inter(size: 13, color: AppColors.textSoft, height: 1.6),
-                  ),
-                ],
-              ),
-            ),
+      // Same real bug fixed here as the other screens in this batch — background wasn't filling
+      // full height on shorter content (e.g. the "launching soon" placeholder specifically).
+      body: Stack(
+        // Real, genuine root-cause fix: Stack defaults to StackFit.loose, meaning it sizes
+        // itself to its non-Positioned child (SafeArea), which in turn sizes to its OWN content
+        // rather than filling available space. Every previous attempt only ever changed the
+        // background widget itself, never addressed this — the Positioned background was
+        // always being clipped down to match the Stack's own, content-sized bounds, regardless
+        // of what explicit size it was given. This forces the Stack itself to fill available
+        // space unconditionally, which is the actual fix.
+        fit: StackFit.expand,
+        children: [
+          Positioned(
+            top: 0,
+            left: 0,
+            width: MediaQuery.of(context).size.width,
+            height: MediaQuery.of(context).size.height,
+            child: AnimatedWallpaper(gradientColors: wallpaperSwatches[state.wallpaperSwatchIndex]),
           ),
+          SafeArea(
+            child: tv.active ? _ActiveContent(state: state, tv: tv, onWatch: () => _watchOnYoutube(context, tv.streamUrl)) : const _ComingSoon(),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ComingSoon extends StatelessWidget {
+  const _ComingSoon();
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(28),
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('🎙️', style: TextStyle(fontSize: 48)),
+            const SizedBox(height: 20),
+            Text('Launching soon', style: AppFonts.fraunces(size: 20, weight: FontWeight.w600), textAlign: TextAlign.center),
+            const SizedBox(height: 12),
+            Text(
+              "We're giving ourselves time to accumulate real users first — so when Town Voice launches, you'll actually have a meaningful audience, and your time will be worth it.",
+              textAlign: TextAlign.center,
+              style: AppFonts.inter(size: 13, color: AppColors.textSoft, height: 1.6),
+            ),
+          ],
         ),
       ),
+    );
+  }
+}
+
+class _ActiveContent extends StatelessWidget {
+  final AppState state;
+  final dynamic tv;
+  final VoidCallback onWatch;
+  const _ActiveContent({required this.state, required this.tv, required this.onWatch});
+
+  @override
+  Widget build(BuildContext context) {
+    final (leaderName, leaderPoints) = state.townVoiceLeader;
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(18, 10, 18, 30),
+      children: [
+        Text('🎙️ Town Voice', style: AppFonts.fraunces(size: 22, weight: FontWeight.w600)),
+        const SizedBox(height: 4),
+        Text("Every week, the leaderboard's top spot earns 15 minutes to speak.", style: AppFonts.inter(size: 12, color: AppColors.textSoft)),
+        const SizedBox(height: 16),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(color: AppColors.oliveCard, borderRadius: BorderRadius.circular(18)),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text("This week's provisional speaker", style: AppFonts.plexMono(size: 10, color: AppColors.textSoft)),
+              const SizedBox(height: 6),
+              Text(leaderName, style: AppFonts.fraunces(size: 20, weight: FontWeight.w600)),
+              Text('$leaderPoints pts so far', style: AppFonts.inter(size: 12, color: AppColors.textSoft)),
+              const SizedBox(height: 14),
+              Row(children: [
+                Expanded(child: _InfoChip(label: 'Date', value: tv.dayLabel)),
+                const SizedBox(width: 8),
+                Expanded(child: _InfoChip(label: 'Time', value: tv.timeLabel)),
+                const SizedBox(width: 8),
+                Expanded(child: _InfoChip(label: 'Length', value: tv.durationLabel)),
+              ]),
+              const SizedBox(height: 14),
+              Text(
+                'Streamed live on YouTube — link activates shortly before start time and stays as the recording afterward.',
+                style: AppFonts.inter(size: 11.5, color: AppColors.textSoft, height: 1.5),
+              ),
+              const SizedBox(height: 14),
+              Row(children: [
+                Expanded(
+                  child: GestureDetector(
+                    onTap: () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Notifications for this — coming soon.'))),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      decoration: BoxDecoration(color: AppColors.gold, borderRadius: BorderRadius.circular(12)),
+                      alignment: Alignment.center,
+                      child: Text('🔔 Notify me', style: AppFonts.inter(size: 12.5, weight: FontWeight.w700, color: AppColors.inkOnGold)),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: GestureDetector(
+                    onTap: () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Add to calendar — coming soon.'))),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      decoration: BoxDecoration(color: AppColors.bg2.withOpacity(0.4), borderRadius: BorderRadius.circular(12), border: Border.all(color: const Color(0x29F6F5EC))),
+                      alignment: Alignment.center,
+                      child: Text('📅 Add to calendar', style: AppFonts.inter(size: 12.5, weight: FontWeight.w700)),
+                    ),
+                  ),
+                ),
+              ]),
+              const SizedBox(height: 8),
+              GestureDetector(
+                onTap: onWatch,
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 13),
+                  decoration: BoxDecoration(gradient: const LinearGradient(colors: [Color(0xFFFF3B30), Color(0xFFC1272D)]), borderRadius: BorderRadius.circular(12)),
+                  alignment: Alignment.center,
+                  child: Text('▶️ Watch on YouTube', style: AppFonts.inter(size: 13, weight: FontWeight.w700, color: Colors.white)),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 24),
+        Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+          Text('Past Town Voices', style: AppFonts.fraunces(size: 15, weight: FontWeight.w600)),
+        ]),
+        const SizedBox(height: 10),
+        // Genuinely empty — no real tracking of past winners exists in the database yet, and
+        // showing the original design's hardcoded example winners would be exactly the kind of
+        // mock data this was asked to avoid.
+        Text('No past Town Voices recorded yet.', style: AppFonts.inter(size: 12, color: AppColors.textSoft)),
+      ],
+    );
+  }
+}
+
+class _InfoChip extends StatelessWidget {
+  final String label;
+  final String value;
+  const _InfoChip({required this.label, required this.value});
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+      decoration: BoxDecoration(color: AppColors.bg1.withOpacity(0.3), borderRadius: BorderRadius.circular(10), border: Border.all(color: const Color(0x24F6F5EC))),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(label, style: AppFonts.plexMono(size: 8.5, color: AppColors.textSoft)),
+        const SizedBox(height: 3),
+        Text(value, style: AppFonts.inter(size: 12, weight: FontWeight.w600)),
+      ]),
     );
   }
 }

@@ -1,7 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart' show Color;
 import 'dart:io';
-import 'dart:math';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:geolocator/geolocator.dart';
 import '../data/deed_catalog.dart';
@@ -55,10 +54,11 @@ class ModerationQueueItem {
   final int day;
   final String reason;
   final String? photoUrl; // reserved for a real Supabase-hosted URL once that exists
-  final File? photoFile; // the actual local photo, for now — was never being passed through at
-  // all before this fix (SubmitDeedModal required a photo to enable Submit, but never actually
-  // sent the picked File anywhere), so a moderator had nothing to review. Compressed the same
+  final Uint8List? photoFile; // the actual local photo, for now — was never being passed through
+  // at all before this fix (SubmitDeedModal required a photo to enable Submit, but never actually
+  // sent the picked photo anywhere), so a moderator had nothing to review. Compressed the same
   // way as everywhere else (longest side capped at 800px, JPEG 70%) before it ever gets here.
+  // Bytes, not dart:io File — this needs to display on web too (simulator preview).
   final String? evidence;
   final String? gps;
   ModerationQueueItem({required this.id, required this.type, required this.points, required this.day, required this.reason, this.photoUrl, this.photoFile, this.evidence, this.gps});
@@ -126,15 +126,19 @@ class UserProfile {
 class FriendEntry {
   final String id; // was missing entirely — made it impossible to properly assign a deed to a
   // specific friend, since there was no way to reference WHICH friend beyond their display name
+  final String friendshipId; // the friendships row id — needed to persist favorite/remove
+  final bool isRequester; // which side of that row the current user is on — favoriting writes to
+  // favorited_by_requester or favorited_by_addressee depending on this
   final String name;
   bool favorited;
-  FriendEntry({required this.id, required this.name, this.favorited = false});
+  FriendEntry({required this.id, required this.friendshipId, required this.isRequester, required this.name, this.favorited = false});
 }
 
 class PendingFriendRequest {
+  final String id; // the friendships row id — needed to act on it (accept/decline)
+  final String requesterId;
   final String name;
-  final int day;
-  const PendingFriendRequest({required this.name, required this.day});
+  const PendingFriendRequest({required this.id, required this.requesterId, required this.name});
 }
 
 class AssignedDeed {
@@ -491,52 +495,135 @@ class AppState extends ChangeNotifier {
     }
   }
 
-  // Friends — seeded with mock data as a fallback before real friendships load. Mock ids given
-  // here are placeholders only (never match a real profile row) — harmless, since this is
-  // immediately overwritten by tryLoadExistingProfile() the moment there's a real session.
-  List<FriendEntry> friends = [
-    FriendEntry(id: 'mock-sana', name: 'Sana R.', favorited: true),
-    FriendEntry(id: 'mock-usman', name: 'Usman T.', favorited: true),
-    FriendEntry(id: 'mock-hira', name: 'Hira M.'),
-  ];
-  List<PendingFriendRequest> pendingFriendRequests = [
-    const PendingFriendRequest(name: 'Bilal K.', day: 1),
-  ];
+  // Friends — starts empty, populated from the real `friendships` table once there's a session
+  // (see tryLoadExistingProfile below). No pre-load mock seed: Friends has no reachable nav entry
+  // in this pilot build, so there's never a user-visible moment before the real load completes.
+  List<FriendEntry> friends = [];
+  // Now real (see loadPendingFriendRequests below) — starts empty rather than seeded, same
+  // reasoning as assignedByMe/assignedToMe: connects to the real `friendships` table now instead
+  // of staying mock.
+  List<PendingFriendRequest> pendingFriendRequests = [];
   // assignedByMe/assignedToMe — now real (see loadAssignedDeeds below), start empty rather than
   // seeded, since these connect to the real assigned_deeds table now instead of staying mock.
   List<AssignedDeed> assignedByMe = [];
   List<AssignedDeed> assignedToMe = [];
 
-  // NOTE: this whole pending-request concept is still local-only, unrelated to the real
-  // redemption flow above — placeholder id here, same treatment as the mock seed data, since
-  // connecting this specific path isn't in scope right now.
-  void approveFriendRequest(String name) {
-    pendingFriendRequests.removeWhere((r) => r.name == name);
-    friends.add(FriendEntry(id: 'pending-$name', name: name));
-    notifyListeners();
+  Future<void> loadPendingFriendRequests() async {
+    final uid = Supabase.instance.client.auth.currentUser?.id;
+    if (uid == null) return;
+    try {
+      final rows = await Supabase.instance.client.from('friendships').select().eq('addressee_id', uid).eq('status', 'pending');
+      final requesterIds = rows.map<String>((r) => r['requester_id'] as String).toSet().toList();
+      if (requesterIds.isEmpty) {
+        pendingFriendRequests = [];
+        notifyListeners();
+        return;
+      }
+      final profiles = await Supabase.instance.client.rpc('get_public_profiles', params: {'ids': requesterIds}) as List<dynamic>;
+      final namesById = {for (final p in profiles) p['id'] as String: p['name'] as String? ?? 'Friend'};
+      pendingFriendRequests = rows
+          .map<PendingFriendRequest>((r) => PendingFriendRequest(
+                id: r['id'] as String,
+                requesterId: r['requester_id'] as String,
+                name: namesById[r['requester_id']] ?? 'Friend',
+              ))
+          .toList();
+      notifyListeners();
+    } catch (_) {
+      // Stays as whatever it already was — doesn't block sign-in.
+    }
   }
 
-  void declineFriendRequest(String name) {
-    pendingFriendRequests.removeWhere((r) => r.name == name);
+  // Calls the request_friend RPC directly — see friends_screen.dart for the two-step UI this
+  // supports (a plain match creates the request immediately; a cross-boundary adult/minor match
+  // returns needs_relationship_answer first, so the caller re-invokes this with an answer).
+  Future<Map<String, dynamic>> requestFriend(String membershipNumber, String name, {String? relationshipAnswer}) async {
+    try {
+      final result = await Supabase.instance.client.rpc('request_friend', params: {
+        'membership_number_input': membershipNumber,
+        'name_input': name,
+        'relationship_answer_input': relationshipAnswer,
+      });
+      return Map<String, dynamic>.from(result as Map);
+    } catch (e) {
+      return {'status': 'error', 'message': 'Could not send that request: ${e.toString()}'};
+    }
+  }
+
+  // Calls the accept_friend_request RPC — always routed through here regardless of whether a
+  // relationship check applies, since only the server can determine that from both users' dob.
+  Future<Map<String, dynamic>> acceptFriendRequest(String friendshipId, {String? relationshipAnswer}) async {
+    try {
+      final result = await Supabase.instance.client.rpc('accept_friend_request', params: {
+        'friendship_id_input': friendshipId,
+        'relationship_answer_input': relationshipAnswer,
+      });
+      final map = Map<String, dynamic>.from(result as Map);
+      final status = map['status'] as String?;
+      if (status == 'success' || status == 'flagged') {
+        final req = pendingFriendRequests.where((r) => r.id == friendshipId).toList();
+        pendingFriendRequests.removeWhere((r) => r.id == friendshipId);
+        if (status == 'success' && req.isNotEmpty) {
+          friends.add(FriendEntry(id: req.first.requesterId, friendshipId: friendshipId, isRequester: false, name: req.first.name));
+        }
+        notifyListeners();
+      }
+      return map;
+    } catch (e) {
+      return {'status': 'error', 'message': 'Could not accept that request: ${e.toString()}'};
+    }
+  }
+
+  // Plain decline — no relationship check applies to declining, and the existing friendships RLS
+  // (auth.uid() = requester_id OR addressee_id) already permits the addressee to update status
+  // directly, so this doesn't need an RPC.
+  Future<void> declineFriendRequest(String friendshipId) async {
+    pendingFriendRequests.removeWhere((r) => r.id == friendshipId);
     notifyListeners();
+    try {
+      await Supabase.instance.client.from('friendships').update({'status': 'declined'}).eq('id', friendshipId);
+    } catch (_) {
+      // Optimistic-locally-first, same pattern as everywhere else in this file.
+    }
   }
 
   static const int maxFavoriteFriends = 5; // matches the original's "star up to 5" rule
 
-  void toggleFavoriteFriend(String name) {
-    final favoritedCount = friends.where((f) => f.favorited).length;
-    for (final f in friends) {
-      if (f.name == name) {
-        if (!f.favorited && favoritedCount >= maxFavoriteFriends) return; // silently no-op at the cap, same as the original
-        f.favorited = !f.favorited;
-      }
-    }
+  // Matches by friend id (the other user's real profile id), not display name — two friends can
+  // share a name, and name never uniquely identified a row anyway. Now persists too: was
+  // local-only before, so a favorite/unfavorite never survived an app restart or showed up on
+  // another device signed into the same account.
+  Future<void> toggleFavoriteFriend(String id) async {
+    final matches = friends.where((f) => f.id == id).toList();
+    if (matches.isEmpty) return;
+    final f = matches.first;
+    final favoritedCount = friends.where((x) => x.favorited).length;
+    if (!f.favorited && favoritedCount >= maxFavoriteFriends) return; // silently no-op at the cap, same as the original
+    f.favorited = !f.favorited;
     notifyListeners();
+    final column = f.isRequester ? 'favorited_by_requester' : 'favorited_by_addressee';
+    try {
+      await Supabase.instance.client.from('friendships').update({column: f.favorited}).eq('id', f.friendshipId);
+    } catch (_) {
+      // Optimistic-locally-first, same pattern as everywhere else in this file.
+    }
   }
 
-  void removeFriend(String name) {
-    friends.removeWhere((f) => f.name == name);
+  // Same id-not-name fix as above, plus now actually persisted: unfriending only ever removed the
+  // row from local state before, so the other person would still see you as a friend and the pair
+  // would reappear on next real load. Marks the friendships row 'removed' rather than deleting it
+  // outright, same non-destructive approach declineFriendRequest already uses for 'declined'.
+  Future<void> removeFriend(String id) async {
+    final matches = friends.where((f) => f.id == id).toList();
+    if (matches.isEmpty) return;
+    final friendshipId = matches.first.friendshipId;
+    friends.removeWhere((f) => f.id == id);
     notifyListeners();
+    try {
+      await Supabase.instance.client.from('friendships').update({'status': 'removed'}).eq('id', friendshipId);
+    } catch (_) {
+      // Optimistic-locally-first, same pattern as everywhere else in this file.
+    }
   }
 
   // Real bug fixed here: Leaderboard and rank-dependent badges (Top 10, Top 3) were comparing
@@ -548,7 +635,7 @@ class AppState extends ChangeNotifier {
 
   Future<void> loadLeaderboard() async {
     try {
-      final profileRows = await Supabase.instance.client.from('profiles_public').select('id, name, city, points').order('points', ascending: false);
+      final profileRows = await Supabase.instance.client.rpc('get_public_profiles') as List<dynamic>;
       final badgeRows = await Supabase.instance.client.from('user_badges').select('user_id');
       final badgeCounts = <String, int>{};
       for (final b in badgeRows) {
@@ -566,7 +653,7 @@ class AppState extends ChangeNotifier {
       // Real weekly data now — was the mock-duplicate-of-All-Time placeholder before. Reuses
       // the same RealLeaderboardEntry model; badgeCount doesn't have a clean per-week meaning,
       // left at 0 for these entries (only affects which tier icon shows next to weekly rows).
-      final weeklyRows = await Supabase.instance.client.from('weekly_leaderboard').select().order('weekly_points', ascending: false);
+      final weeklyRows = await Supabase.instance.client.rpc('get_weekly_leaderboard') as List<dynamic>;
       weeklyLeaderboard = weeklyRows.map<RealLeaderboardEntry>((r) => RealLeaderboardEntry(
             id: r['user_id'] as String,
             name: r['name'] as String? ?? 'User',
@@ -607,7 +694,7 @@ class AppState extends ChangeNotifier {
 
       var namesById = <String, String>{};
       if (otherIds.isNotEmpty) {
-        final profiles = await Supabase.instance.client.from('profiles_public').select('id, name').inFilter('id', otherIds);
+        final profiles = await Supabase.instance.client.rpc('get_public_profiles', params: {'ids': otherIds}) as List<dynamic>;
         namesById = {for (final p in profiles) p['id'] as String: p['name'] as String? ?? 'Friend'};
       }
 
@@ -663,70 +750,10 @@ class AppState extends ChangeNotifier {
     }
   }
 
-  // Real bug fixed here: this was entirely local before — a code generated on one device only
-  // ever existed in that device's memory, so a friend on a different device had no way to
-  // validate or redeem it. That's despite the invite_codes table already existing in the schema
-  // specifically for this. Now writes/reads for real, so this actually works across two people
-  // on two different phones, which is the whole point of an invite link.
-  //
-  // Note this still doesn't make the LINK itself clickable-to-open-the-app — that's the separate
-  // native deep-linking work flagged before. This fix is about the CODE actually being
-  // verifiable across devices once someone manually enters it (e.g. during Profile Setup).
-  // Real bug fixed here: this always returned a link regardless of whether the database write
-  // actually succeeded, silently swallowing any error. That means it was entirely possible to
-  // generate and confidently share a link that was NEVER actually written to invite_codes —
-  // which would explain "invalid code" happening consistently, even with a clean copy-paste,
-  // since there'd be nothing in the database for the other side to ever match against. Now
-  // returns the real failure reason instead of pretending success either way.
-  Future<(String?, String?)> generateInviteLink() async {
-    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no ambiguous 0/O/1/I characters
-    final rand = Random();
-    final code = List.generate(6, (_) => chars[rand.nextInt(chars.length)]).join();
-    final uid = Supabase.instance.client.auth.currentUser?.id;
-    if (uid == null) return (null, 'You need to be signed in to do this.');
-    try {
-      await Supabase.instance.client.from('invite_codes').insert({'code': code, 'issued_by': uid});
-      return ('https://achakaro.pk/join/$code', null);
-    } catch (e) {
-      return (null, 'Could not generate a real invite link: ${e.toString()}');
-    }
-  }
-
-  // Accepts either a full link or a bare code. Returns null on success, or an error message on
-  // failure. requester_id is set to the REDEEMER's own uid (not the issuer's) — required by the
-  // friendships table's insert policy (auth.uid() = requester_id), since the redeemer is the one
-  // actually performing this write. Friendship is created already-approved, since redeeming a
-  // one-time code from someone IS the approval, not a separate request needing review.
-  Future<String?> redeemInviteCode(String codeOrLink) async {
-    final uid = Supabase.instance.client.auth.currentUser?.id;
-    if (uid == null) return 'You need to be signed in to do this.';
-    final trimmed = codeOrLink.trim();
-    final token = (trimmed.contains('/') ? trimmed.split('/').last : trimmed).toUpperCase();
-    if (token.isEmpty) return null; // nothing entered — treated as "skipped", not an error
-
-    try {
-      final rows = await Supabase.instance.client.from('invite_codes').select().eq('code', token).limit(1);
-      if (rows.isEmpty) return 'That code isn\'t valid.';
-      final row = rows.first;
-      if (row['used'] == true) return 'That code has already been used.';
-      final issuerId = row['issued_by'] as String;
-      if (issuerId == uid) return 'You can\'t redeem your own invite code.';
-
-      await Supabase.instance.client.from('invite_codes').update({'used': true, 'used_by': uid}).eq('code', token);
-      await Supabase.instance.client.from('friendships').insert({'requester_id': uid, 'addressee_id': issuerId, 'status': 'approved'});
-
-      final issuerProfile = await Supabase.instance.client.from('profiles_public').select('name').eq('id', issuerId).limit(1);
-      final issuerName = issuerProfile.isNotEmpty ? issuerProfile.first['name'] as String? ?? 'Friend' : 'Friend';
-      friends.add(FriendEntry(id: issuerId, name: issuerName));
-      notifyListeners();
-      return null;
-    } catch (e) {
-      // Was a generic message hiding the real reason — this masked exactly the kind of thing
-      // we need to actually see (like the RLS gap on invite_codes that turned out to be the real
-      // root cause of every failed attempt before this). Real error shown now instead.
-      return 'Could not redeem that code: ${e.toString()}';
-    }
-  }
+  // generateInviteLink/redeemInviteCode removed — the invite_codes table they depended on was
+  // never actually created in the live database (confirmed directly against Supabase), so this
+  // path always threw in production regardless. Superseded entirely by the membership-number +
+  // name friend-request flow (request_friend RPC), not repaired.
 
   bool get hasUnreadNotifications => notifications.any((n) => !n.read);
 
@@ -932,18 +959,21 @@ class AppState extends ChangeNotifier {
   // private deed-photos bucket. Returns the storage path (not a public URL — the bucket is
   // private, only the submitter and moderators/owners can actually view it) or null if there's
   // no photo or the upload fails, in which case the deed record still gets created either way.
-  Future<String?> _uploadDeedPhoto(String uid, File photoFile) async {
+  // Bytes, not dart:io File — File is unusable on Flutter web (no real filesystem), so
+  // uploadBinary over raw bytes is what actually works on every platform, not just a web
+  // special-case. fileName is only ever used to recover the original extension.
+  Future<String?> _uploadDeedPhoto(String uid, Uint8List photoBytes, String? fileName) async {
     try {
-      final ext = photoFile.path.split('.').last.toLowerCase();
+      final ext = (fileName != null && fileName.contains('.')) ? fileName.split('.').last.toLowerCase() : 'jpg';
       final path = '$uid/${DateTime.now().millisecondsSinceEpoch}.$ext';
-      await Supabase.instance.client.storage.from('deed-photos').upload(path, photoFile);
+      await Supabase.instance.client.storage.from('deed-photos').uploadBinary(path, photoBytes);
       return path;
     } catch (_) {
       return null; // best-effort, same "don't block the person" reasoning as the other writes
     }
   }
 
-  Future<SubmitResult> submitPhotoDeed(String type, Map<String, String> details, {File? photoFile, String? campaignId}) async {
+  Future<SubmitResult> submitPhotoDeed(String type, Map<String, String> details, {Uint8List? photoBytes, String? photoFileName, String? campaignId}) async {
     final meta = deedCatalog[type];
     if (meta == null) return SubmitResult(flagged: false, leveledUpTier: null, newMilestones: []);
 
@@ -972,7 +1002,7 @@ class AppState extends ChangeNotifier {
     final willFlag = repeatFlag || gpsFailed || isDonation;
     final awardedPoints = meta.points;
     final uid = Supabase.instance.client.auth.currentUser?.id;
-    final photoPath = (uid != null && photoFile != null) ? await _uploadDeedPhoto(uid, photoFile) : null;
+    final photoPath = (uid != null && photoBytes != null) ? await _uploadDeedPhoto(uid, photoBytes, photoFileName) : null;
 
     if (willFlag) {
       lastLoggedAt[type] = DateTime.now(); // cooldown must start here too — a flagged/pending
@@ -1022,7 +1052,7 @@ class AppState extends ChangeNotifier {
         points: awardedPoints,
         day: simDay,
         reason: reasonText,
-        photoFile: photoFile,
+        photoFile: photoBytes,
         evidence: evidence.isEmpty ? null : evidence,
         gps: position != null ? '${position.latitude.toStringAsFixed(4)}, ${position.longitude.toStringAsFixed(4)}' : null,
       ));
@@ -1477,11 +1507,21 @@ class AppState extends ChangeNotifier {
     // session it happened in. Neither the redeemer nor the issuer would see it again after
     // reopening the app, on either side. Fixed by actually fetching it now.
     try {
-      final rows = await Supabase.instance.client.from('friendships').select().or('requester_id.eq.$uid,addressee_id.eq.$uid').eq('status', 'approved');
+      final rows = await Supabase.instance.client
+          .from('friendships')
+          .select('id, requester_id, addressee_id, favorited_by_requester, favorited_by_addressee')
+          .or('requester_id.eq.$uid,addressee_id.eq.$uid')
+          .eq('status', 'approved');
       final otherIds = rows.map<String>((r) => r['requester_id'] == uid ? r['addressee_id'] as String : r['requester_id'] as String).toList();
       if (otherIds.isNotEmpty) {
-        final otherProfiles = await Supabase.instance.client.from('profiles_public').select('id, name').inFilter('id', otherIds);
-        friends = otherProfiles.map<FriendEntry>((p) => FriendEntry(id: p['id'] as String, name: p['name'] as String? ?? 'Friend')).toList();
+        final otherProfiles = await Supabase.instance.client.rpc('get_public_profiles', params: {'ids': otherIds}) as List<dynamic>;
+        final namesById = {for (final p in otherProfiles) p['id'] as String: p['name'] as String? ?? 'Friend'};
+        friends = rows.map<FriendEntry>((r) {
+          final isRequester = r['requester_id'] == uid;
+          final otherId = isRequester ? r['addressee_id'] as String : r['requester_id'] as String;
+          final favorited = (isRequester ? r['favorited_by_requester'] : r['favorited_by_addressee']) as bool? ?? false;
+          return FriendEntry(id: otherId, friendshipId: r['id'] as String, isRequester: isRequester, name: namesById[otherId] ?? 'Friend', favorited: favorited);
+        }).toList();
       } else {
         friends = [];
       }
@@ -1489,6 +1529,7 @@ class AppState extends ChangeNotifier {
       // Doesn't block sign-in — friends list just won't reflect real connections until the
       // next successful load.
     }
+    await loadPendingFriendRequests();
 
     // Real notifications too — was always an empty list before, since nothing ever loaded them
     // and (separately) nothing could even write one, given the missing INSERT policy.

@@ -29,10 +29,11 @@ bool allCategoriesTouched(AppState s) {
   return categoryDefs.every((c) => touched.contains(c.key));
 }
 
-int computeRank(AppState s, List<OtherUser> otherUsers) {
-  final all = [...otherUsers.map((u) => u.points), s.user.points]..sort((a, b) => b.compareTo(a));
-  return all.indexOf(s.user.points) + 1;
-}
+// Real bug fixed here: this used to compare against otherUsers (a mock rival dataset) directly.
+// Now delegates to AppState.myRank, the one real, database-backed source of truth — signature
+// kept unchanged (still takes otherUsers) so none of the 40 badge definitions or other call
+// sites below needed touching, even though the parameter itself is now unused.
+int computeRank(AppState s, List<OtherUser> otherUsers) => s.myRank;
 
 // Not `const` — this list holds closures (the `check` functions), and closures can never be
 // compile-time constants in Dart, no matter how simple their body is. `final` still means this

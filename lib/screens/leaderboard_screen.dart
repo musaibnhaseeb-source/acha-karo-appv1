@@ -1,14 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../theme/app_theme.dart';
 import '../state/app_state.dart';
+import '../widgets/animated_wallpaper.dart';
 import '../data/tiers.dart';
 
+enum LeaderboardMode { allTime, thisWeek }
+
 // Extracted out of board_screen.dart's Leaderboard segment so it can be its own destination —
-// now reached from a Home tile instead of living inside the Board tab. All-Time only for the
-// pilot — the "This Week" toggle was removed since it was already just an honest placeholder
-// showing identical data to All-Time (real weekly-window tracking needs data this app doesn't
-// collect yet), ready to bring back once that's real.
+// now reached from a Home tile instead of living inside the Board tab. "This Week" is real now
+// (see weekly_leaderboard.sql) — was previously removed since the old version was an honest
+// placeholder duplicating All-Time. The toggle itself only shows when
+// remoteConfig.weeklyLeaderboardActive is true, same database-driven activation pattern as
+// campaigns/Town Voice. Real cross-user data throughout (was otherUsers, a mock rival dataset,
+// before) — profiles is fully public-select under existing RLS, so no reason it needed to stay
+// mock.
 class LeaderboardScreen extends StatefulWidget {
   const LeaderboardScreen({super.key});
   @override
@@ -16,13 +23,34 @@ class LeaderboardScreen extends StatefulWidget {
 }
 
 class _LeaderboardScreenState extends State<LeaderboardScreen> {
+  LeaderboardMode mode = LeaderboardMode.allTime;
+
+  @override
+  void initState() {
+    super.initState();
+    // Refreshed on open, not just relying on the one-time load at sign-in — points change
+    // often (approvals, new submissions), so this keeps the standing reasonably current.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<AppState>().loadLeaderboard();
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = context.watch<AppState>();
-    final entries = <(String, String, int, bool, int)>[
-      (state.user.name, state.user.city, state.user.points, true, state.user.badges.length),
-      for (final o in otherUsers) (o.name, o.city, o.points, false, o.badgeCount),
-    ]..sort((a, b) => b.$3.compareTo(a.$3));
+    final uid = Supabase.instance.client.auth.currentUser?.id;
+    final weeklyOn = state.remoteConfig.weeklyLeaderboardActive;
+    final effectiveMode = weeklyOn ? mode : LeaderboardMode.allTime;
+
+    final entries = effectiveMode == LeaderboardMode.allTime
+        ? <(String, String, int, bool, int)>[
+            (state.user.name, state.user.city, state.user.points, true, state.user.badges.length),
+            for (final o in state.realLeaderboard.where((e) => e.id != uid)) (o.name, o.city, o.points, false, o.badgeCount),
+          ]
+        : <(String, String, int, bool, int)>[
+            for (final o in state.weeklyLeaderboard) (o.name, o.city, o.points, o.id == uid, 0),
+          ];
+    entries.sort((a, b) => b.$3.compareTo(a.$3));
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -33,9 +61,30 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
         title: Text('Leaderboard', style: AppFonts.inter(size: 14, weight: FontWeight.w600)),
         centerTitle: true,
       ),
-      body: Container(
-        decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: wallpaperSwatches[context.watch<AppState>().wallpaperSwatchIndex])),
-        child: SafeArea(
+      // Real bug fixed here: Container(decoration: gradient, child: SafeArea(...)) only fills
+      // as much height as its content needs — on a short screen (few leaderboard entries), the
+      // background stopped short of the bottom, showing black underneath instead of the
+      // wallpaper. A Stack with the gradient as a Positioned.fill layer decouples the background
+      // from content height entirely, so it always covers the full screen regardless of how much
+      // content is actually in it.
+      body: Stack(
+        // Real, genuine root-cause fix: Stack defaults to StackFit.loose, meaning it sizes
+        // itself to its non-Positioned child (SafeArea), which in turn sizes to its OWN content
+        // rather than filling available space. Every previous attempt only ever changed the
+        // background widget itself, never addressed this — the Positioned background was
+        // always being clipped down to match the Stack's own, content-sized bounds, regardless
+        // of what explicit size it was given. This forces the Stack itself to fill available
+        // space unconditionally, which is the actual fix.
+        fit: StackFit.expand,
+        children: [
+          Positioned(
+            top: 0,
+            left: 0,
+            width: MediaQuery.of(context).size.width,
+            height: MediaQuery.of(context).size.height,
+            child: AnimatedWallpaper(gradientColors: wallpaperSwatches[context.watch<AppState>().wallpaperSwatchIndex]),
+          ),
+        SafeArea(
           child: SingleChildScrollView(
             padding: const EdgeInsets.fromLTRB(18, 10, 18, 30),
             child: Column(
@@ -43,19 +92,25 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
               children: [
                 Text('👑 Leaderboard', style: AppFonts.fraunces(size: 22, weight: FontWeight.w600)),
                 const SizedBox(height: 14),
-                // "This Week" toggle removed for the pilot — it was already just an honest
-                // placeholder showing the same ranking as All-Time (real weekly-window tracking
-                // needs data this app doesn't collect yet), so hiding it rather than showing a
-                // toggle that doesn't actually do anything different is the right call here.
-                // Was "🔄 Resets every Monday — live standing" — removed for the pilot since the
-                // weekly-reset concept is tied to the still-pending "This Week" feature, already
-                // hidden above. Kept as an all-time-only standing, no misleading claim about
-                // resets that don't actually happen yet.
+                if (weeklyOn) ...[
+                  Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(color: AppColors.bg1.withOpacity(0.35), borderRadius: BorderRadius.circular(12), border: Border.all(color: const Color(0x1FF6F5EC))),
+                    child: Row(children: [
+                      Expanded(child: _SegBtn(label: 'All-Time', active: mode == LeaderboardMode.allTime, onTap: () => setState(() => mode = LeaderboardMode.allTime))),
+                      Expanded(child: _SegBtn(label: 'This Week', active: mode == LeaderboardMode.thisWeek, onTap: () => setState(() => mode = LeaderboardMode.thisWeek))),
+                    ]),
+                  ),
+                  const SizedBox(height: 10),
+                ],
                 Container(
                   width: double.infinity,
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                   decoration: BoxDecoration(color: AppColors.oliveCard, borderRadius: BorderRadius.circular(12)),
-                  child: Text('🏆 All-time standing', style: AppFonts.inter(size: 11, color: AppColors.textSoft)),
+                  child: Text(
+                    effectiveMode == LeaderboardMode.allTime ? '🏆 All-time standing' : '🔄 Resets every Monday — this week\'s standing',
+                    style: AppFonts.inter(size: 11, color: AppColors.textSoft),
+                  ),
                 ),
                 const SizedBox(height: 10),
                 ...entries.asMap().entries.map((e) {
@@ -91,6 +146,26 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
             ),
           ),
         ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SegBtn extends StatelessWidget {
+  final String label;
+  final bool active;
+  final VoidCallback onTap;
+  const _SegBtn({required this.label, required this.active, required this.onTap});
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        decoration: BoxDecoration(color: active ? AppColors.gold : Colors.transparent, borderRadius: BorderRadius.circular(9)),
+        alignment: Alignment.center,
+        child: Text(label, textAlign: TextAlign.center, style: AppFonts.plexMono(size: 10, weight: FontWeight.w600, color: active ? AppColors.inkOnGold : AppColors.textSoft)),
       ),
     );
   }

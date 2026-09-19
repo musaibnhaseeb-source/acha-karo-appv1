@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'theme/app_theme.dart';
@@ -8,8 +9,11 @@ import 'screens/login_screen.dart';
 import 'screens/otp_verify_screen.dart';
 import 'screens/profile_setup_screen.dart';
 import 'screens/home_screen.dart';
+import 'screens/main_tab_screen.dart';
 import 'screens/welcome_animation_screen.dart';
 import 'widgets/animated_wallpaper.dart';
+import 'utils/notifications.dart';
+import 'widgets/update_available_dialog.dart';
 import 'supabase_config.dart';
 
 // This connects the app to Supabase — but only the CONNECTION. Nothing in AppState reads or
@@ -18,6 +22,21 @@ import 'supabase_config.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Supabase.initialize(url: supabaseUrl, publishableKey: supabasePublishableKey);
+  // Real fix attempt #2 for the black-unused-screen-area issue. The earlier widget-tree fix
+  // (a Stack with the gradient as a Positioned.fill layer, applied across 10 screens) did NOT
+  // resolve it on real-device testing — a strong signal the actual cause was misdiagnosed the
+  // first time. That fix stays in place (it's still correct defensively), but this is the real
+  // likely culprit: Android's own system navigation bar renders plain black by default,
+  // regardless of what the app itself draws — this makes it match the app's dark background
+  // instead, which is a system-chrome configuration issue, not a Flutter layout one.
+  SystemChrome.setSystemUIOverlayStyle(
+    const SystemUiOverlayStyle(
+      systemNavigationBarColor: AppColors.bg1,
+      systemNavigationBarIconBrightness: Brightness.light,
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: Brightness.light,
+    ),
+  );
   runApp(const AchaKaroApp());
 }
 
@@ -34,10 +53,22 @@ class AchaKaroApp extends StatelessWidget {
         theme: buildAppTheme(),
         // App-wide text scale from Settings (A-/A/A+) applied here, once, rather than threading
         // a scale factor through every screen individually.
-        builder: (context, child) => Consumer<AppState>(
-          builder: (context, state, _) => MediaQuery(
-            data: MediaQuery.of(context).copyWith(textScaler: TextScaler.linear(state.textScaleFactor)),
-            child: child!,
+        //
+        // New — genuine, guaranteed safety net for the black-gap background issue, rather than
+        // continuing to chase its exact per-screen cause. Every screen intentionally sets its
+        // own Scaffold to Colors.transparent so its custom gradient can show through — which
+        // means the theme's scaffoldBackgroundColor (already correctly set to AppColors.bg1)
+        // never actually gets a chance to act as a fallback, since every screen opts out of it.
+        // This Container sits underneath the ENTIRE app's widget tree instead — genuinely
+        // guaranteed to be there regardless of what any individual screen does or doesn't
+        // render correctly.
+        builder: (context, child) => Container(
+          color: AppColors.bg1,
+          child: Consumer<AppState>(
+            builder: (context, state, _) => MediaQuery(
+              data: MediaQuery.of(context).copyWith(textScaler: TextScaler.linear(state.textScaleFactor)),
+              child: child!,
+            ),
           ),
         ),
         home: const RootScreen(),
@@ -58,17 +89,31 @@ class RootScreen extends StatefulWidget {
   State<RootScreen> createState() => _RootScreenState();
 }
 
-class _RootScreenState extends State<RootScreen> {
+// Real architectural gap addressed here — the app only ever fetched data once, at login, with
+// nothing pushing live updates while it was open. WidgetsBindingObserver lets this refresh
+// automatically whenever the app comes back to the foreground (switching apps and back, not
+// just a full restart) — paired with pull-to-refresh on Home (see home_screen.dart) for
+// explicit, on-demand refreshing too. Doesn't require real-time subscriptions to meaningfully
+// close this gap — just re-running the same load that already happens at login.
+class _RootScreenState extends State<RootScreen> with WidgetsBindingObserver {
   RootScreenState screen = RootScreenState.checkingSession;
   String? pendingEmail; // set once a code has been sent, needed by OtpVerifyScreen
   StreamSubscription<AuthState>? _authSub;
+  bool _updateDialogShown = false; // guards the update popup from showing more than once per state change
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     // Doesn't depend on auth state (campaigns/app_config are publicly readable) — loads
     // regardless of whether this ends up being a login or a returning-session skip.
     context.read<AppState>().loadRemoteConfig();
+    // New — real system notifications, initialized once at app start. Permission request
+    // happens here too (same category as camera/location, just no single natural on-demand
+    // moment to tie it to) — requestNotificationPermission() itself no-ops harmlessly if
+    // already granted or denied, safe to call every launch.
+    initNotifications();
+    requestNotificationPermission();
     _checkExistingSession();
 
     // Real gap fixed here: there was no logout anywhere in the app at all. Listening centrally
@@ -89,8 +134,36 @@ class _RootScreenState extends State<RootScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _authSub?.cancel();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState appState) {
+    if (appState == AppLifecycleState.resumed) {
+      // Reinforced here too, defensively — some Android/Flutter combinations can reset system
+      // UI styling on resume, so this makes sure the nav bar color fix from main() holds even
+      // after backgrounding and returning to the app.
+      SystemChrome.setSystemUIOverlayStyle(
+        const SystemUiOverlayStyle(
+          systemNavigationBarColor: AppColors.bg1,
+          systemNavigationBarIconBrightness: Brightness.light,
+          statusBarColor: Colors.transparent,
+          statusBarIconBrightness: Brightness.light,
+        ),
+      );
+    }
+    // Only refresh once actually signed in and past setup — no point re-fetching a profile that
+    // doesn't exist yet, or interrupting the login/OTP flow.
+    if (appState == AppLifecycleState.resumed && screen == RootScreenState.app) {
+      // Same gap as Home's pull-to-refresh, fixed the same way — loadRemoteConfig() (campaigns)
+      // needs to actually run here too, not just tryLoadExistingProfile(), or a disabled
+      // campaign would keep showing after resuming from background just like it did before.
+      final appStateObj = context.read<AppState>();
+      appStateObj.tryLoadExistingProfile();
+      appStateObj.loadRemoteConfig();
+    }
   }
 
   Future<void> _checkExistingSession() async {
@@ -104,19 +177,55 @@ class _RootScreenState extends State<RootScreen> {
     // Signed in but somehow no profile row (shouldn't normally happen) — fall back to Setup
     // rather than getting stuck.
     setState(() => screen = found ? RootScreenState.app : RootScreenState.setup);
+    // New — real update check, placed here specifically rather than earlier in initState(),
+    // since a genuine, confirmed session is needed before this can do anything meaningful.
+    if (found) {
+      context.read<AppState>().checkForUpdate();
+      context.read<AppState>().loadEquippedSkin();
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final state = context.watch<AppState>();
+
+    // New — real update popup, shown once when a genuine, active update this user hasn't
+    // acknowledged yet is present. Guarded so it only ever triggers once per state change,
+    // not on every rebuild.
+    if (state.pendingUpdate != null && !_updateDialogShown) {
+      _updateDialogShown = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          showDialog(context: context, barrierDismissible: false, builder: (_) => UpdateAvailableDialog(update: state.pendingUpdate!))
+              .then((_) => _updateDialogShown = false);
+        }
+      });
+    }
+
     return Scaffold(
-      body: SafeArea(
-        child: Stack(
-          children: [
-            Positioned.fill(child: AnimatedWallpaper(gradientColors: wallpaperSwatches[state.wallpaperSwatchIndex])),
-            _buildBody(context),
-          ],
-        ),
+      // Real fix here: the background now sits OUTSIDE SafeArea, not inside it — the previous
+      // structure meant an explicit full MediaQuery size would have been positioned relative to
+      // SafeArea's own reduced bounds, not the actual full screen, working against the fix
+      // rather than completing it. SafeArea now wraps only the real content underneath.
+      body: Stack(
+        // Real, genuine root-cause fix: Stack defaults to StackFit.loose, meaning it sizes
+        // itself to its non-Positioned child (SafeArea), which in turn sizes to its OWN content
+        // rather than filling available space. Every previous attempt only ever changed the
+        // background widget itself, never addressed this — the Positioned background was
+        // always being clipped down to match the Stack's own, content-sized bounds, regardless
+        // of what explicit size it was given. This forces the Stack itself to fill available
+        // space unconditionally, which is the actual fix.
+        fit: StackFit.expand,
+        children: [
+          Positioned(
+            top: 0,
+            left: 0,
+            width: MediaQuery.of(context).size.width,
+            height: MediaQuery.of(context).size.height,
+            child: AnimatedWallpaper(gradientColors: wallpaperSwatches[state.wallpaperSwatchIndex]),
+          ),
+          SafeArea(child: _buildBody(context)),
+        ],
       ),
     );
   }
@@ -140,38 +249,37 @@ class _RootScreenState extends State<RootScreen> {
             final found = await context.read<AppState>().tryLoadExistingProfile();
             if (!mounted) return;
             setState(() => screen = found ? RootScreenState.app : RootScreenState.setup);
+            if (found) {
+              context.read<AppState>().checkForUpdate();
+              context.read<AppState>().loadEquippedSkin();
+            }
           },
         );
       case RootScreenState.setup:
         return ProfileSetupScreen(
-          onComplete: ({required name, required gender, required dob, required city, phone, avatarFile, inviteCode}) async {
+          onComplete: ({required name, required gender, required dob, required city, phone, avatarFile}) async {
             final appState = context.read<AppState>();
             appState.completeSetup(name: name, gender: gender, dob: dob, city: city, phone: phone, avatarFile: avatarFile);
-            // Real write now — creates the actual profiles row in Supabase to match. If this
-            // fails (e.g. no connection), local state still updated so the person isn't stuck;
-            // the row just wouldn't exist remotely yet, worth a proper retry/error UI later.
-            await appState.createProfileInSupabase();
-            // Redeeming needs a real profile row to exist first (the friendship references it),
-            // so this deliberately runs after createProfileInSupabase completes, not before.
-            // Real bug fixed here: the error result was being completely discarded — if
-            // redemption failed for ANY reason, there was no way to ever find out why. Now shown
-            // directly, so the actual failure reason (if any) is visible instead of silent.
-            if (inviteCode != null && inviteCode.isNotEmpty) {
-              final error = await appState.redeemInviteCode(inviteCode);
-              if (error != null && mounted) {
-                await showDialog(
-                  context: context,
-                  builder: (ctx) => AlertDialog(
-                    backgroundColor: AppColors.bg2,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-                    title: Text('Invite code', style: AppFonts.fraunces(size: 16, weight: FontWeight.w600)),
-                    content: Text(error, style: AppFonts.inter(size: 12.5, color: AppColors.textSoft)),
-                    actions: [
-                      TextButton(onPressed: () => Navigator.of(ctx).pop(), child: Text('OK', style: AppFonts.inter(size: 13, weight: FontWeight.w600, color: AppColors.gold))),
-                    ],
-                  ),
-                );
-              }
+            // Real write now — creates the actual profiles row in Supabase to match. Real bug
+            // fixed here: this had no error checking at all, so a failure here was completely
+            // silent — Continue would look enabled and do nothing when tapped, no visible error
+            // anywhere. Without a real profile row, there's nothing for the rest of setup to
+            // actually attach to, so this genuinely should stop the flow.
+            final profileError = await appState.createProfileInSupabase();
+            if (profileError != null && mounted) {
+              await showDialog(
+                context: context,
+                builder: (ctx) => AlertDialog(
+                  backgroundColor: AppColors.bg2,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                  title: Text('Could not finish setup', style: AppFonts.fraunces(size: 16, weight: FontWeight.w600)),
+                  content: Text(profileError, style: AppFonts.inter(size: 12.5, color: AppColors.textSoft)),
+                  actions: [
+                    TextButton(onPressed: () => Navigator.of(ctx).pop(), child: Text('OK', style: AppFonts.inter(size: 13, weight: FontWeight.w600, color: AppColors.gold))),
+                  ],
+                ),
+              );
+              return; // Stops here deliberately — see comment above.
             }
             if (mounted) setState(() => screen = RootScreenState.welcome);
           },
@@ -182,13 +290,9 @@ class _RootScreenState extends State<RootScreen> {
           onDone: () => setState(() => screen = RootScreenState.app),
         );
       case RootScreenState.app:
-        // Simplified to Home only, per the current pilot direction — Board (Achievements) and
-        // Profile are both hidden now, which left the nav bar with a single real destination.
-        // Removing the nav bar entirely rather than keeping a 1-item bar that has nothing to
-        // switch between. Neither BoardScreen nor ProfileScreen's code was touched — same
-        // hide-don't-delete treatment as everything else this pass, both fully restorable by
-        // adding them back to a nav structure whenever they're wanted again.
-        return const HomeScreen();
+        // Profile is a real tab now, not hidden — brought back per direction as "not a
+        // regression, a necessity." Board/Achievements stays parked, per explicit instruction.
+        return const MainTabScreen();
     }
   }
 }
