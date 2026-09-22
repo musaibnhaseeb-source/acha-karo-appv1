@@ -48,3 +48,28 @@ button {
   background: var(--gold);
   color: var(--ink-on-gold);
 }
+
+
+.nav-link:hover {
+  background: var(--olive-card-strong);
+  color: var(--text);
+}
+
+/* Printing (used by the One-Pager's Download button, and safe for any admin page): hide the
+   app chrome -- sidebar and top bar -- and let the page's own content fill the sheet. */
+@media print {
+  .admin-shell-sidebar,
+  .admin-shell-topbar,
+  .no-print {
+    display: none !important;
+  }
+  .admin-shell-body,
+  .admin-shell-main {
+    margin: 0 !important;
+    padding: 0 !important;
+    max-width: none !important;
+  }
+  body {
+    background: #fff !important;
+  }
+}
