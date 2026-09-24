@@ -7,6 +7,7 @@ import '../data/roadmap_data.dart';
 import '../data/remote_config.dart';
 import '../data/deed_catalog.dart';
 import '../widgets/submit_deed_flow.dart';
+import '../widgets/guddi_home.dart';
 import '../widgets/flip_card.dart';
 import '../widgets/campaign_icon.dart';
 import 'hall_of_fame_screen.dart';
@@ -292,7 +293,7 @@ class _RoadmapScreenState extends State<RoadmapScreen> {
                   child: Text('${widget.campaign.title} · $deedsDone / ${stops.last.threshold} deeds', style: AppFonts.plexMono(size: 11, color: AppColors.textSoft)),
                 ),
                 Expanded(
-                  child: _RoadView(
+                  child: RoadmapRoadView(
                     campaign: widget.campaign,
                     stops: stops,
                     deedsDone: deedsDone,
@@ -301,7 +302,7 @@ class _RoadmapScreenState extends State<RoadmapScreen> {
                   ),
                 ),
                 // New — fuel bar mechanic, replacing continuous per-deed vehicle movement per
-                // direction: the vehicle now snaps to its last reached stop (see _RoadView),
+                // direction: the vehicle now snaps to its last reached stop (see RoadmapRoadView),
                 // and this shows real progress toward the next one instead. Segments aren't
                 // equal length (3, then +4, then +5 deeds) — this correctly fills based on each
                 // segment's real length, not a naive overall fraction.
@@ -499,7 +500,7 @@ class _FuelBar extends StatelessWidget {
   }
 }
 
-class _RoadView extends StatefulWidget {
+class RoadmapRoadView extends StatefulWidget {
   final Campaign campaign; // new — needed for the default vehicle icon and campaign-scoped equip lookup
   final List<RoadmapStop> stops;
   final int deedsDone;
@@ -508,13 +509,13 @@ class _RoadView extends StatefulWidget {
   // a genuine mismatch (the parent was passing claimedStopIds to a parameter that didn't exist)
   // that would have failed to compile.
   final void Function(RoadmapStop) onStopTap;
-  const _RoadView({required this.campaign, required this.stops, required this.deedsDone, required this.claimedStopIds, required this.onStopTap});
+  const RoadmapRoadView({required this.campaign, required this.stops, required this.deedsDone, required this.claimedStopIds, required this.onStopTap});
 
   @override
-  State<_RoadView> createState() => _RoadViewState();
+  State<RoadmapRoadView> createState() => _RoadmapRoadViewState();
 }
 
-class _RoadViewState extends State<_RoadView> with SingleTickerProviderStateMixin {
+class _RoadmapRoadViewState extends State<RoadmapRoadView> with SingleTickerProviderStateMixin {
   // Real change here, not a tuning tweak: plain scrolling can only pan, not zoom — "pan in"
   // (zoom in while following) genuinely needs InteractiveViewer's transform matrix instead of a
   // simple scroll offset. TransformationController has no built-in animateTo, so this drives its
@@ -566,6 +567,54 @@ class _RoadViewState extends State<_RoadView> with SingleTickerProviderStateMixi
     _fromMatrix = _transformController.value.clone();
     _toMatrix = targetMatrix;
     _animController.forward(from: 0);
+  }
+
+  // Same x the stop marker uses (markers sit beside the road, not on it).
+  double _markerLeft(List<Offset> points, List<double> xFractions, int i) =>
+      points[i + 1].dx + (xFractions[(i + 1) % xFractions.length] < 0.5 ? 60 : -116);
+
+  // Guddi on the journey. The camera follows the truck, so her guide spot is right beside it
+  // (on the side away from the stop marker) — "Bas N aur!" to the next stop, or strong
+  // "Road complete! 💪" once the last stop is reached. A strong Guddi also waits at the final stop
+  // as the goal, visible when panning ahead.
+  List<Widget> _roadGuddi(List<Offset> points, List<double> xFractions, Offset truckPos, double canvasW) {
+    final stops = widget.stops;
+    if (stops.isEmpty) return const [];
+    final last = stops.length - 1;
+    final nextIdx = stops.indexWhere((s) => widget.deedsDone < s.threshold); // -1 = road complete
+    final complete = nextIdx == -1;
+    final out = <Widget>[];
+
+    if (!complete) {
+      // The goal: strong Guddi beside the final stop's marker, on the side away from the road.
+      final markerLeft = _markerLeft(points, xFractions, last);
+      final markerRightOfRoad = xFractions[(last + 1) % xFractions.length] < 0.5;
+      const goalH = 84.0, goalW = 60.0;
+      out.add(Positioned(
+        left: markerRightOfRoad ? markerLeft + 56 + 4 : markerLeft - 4 - goalW,
+        top: points[last + 1].dy + 28 - goalH,
+        child: IgnorePointer(child: SizedBox(width: goalW, child: _RoadGuddi(pose: GuddiPoses.strong, height: goalH))),
+      ));
+    }
+
+    // The guide, beside the truck. Positioned by her real width (poses are ~0.65 wide:tall), and
+    // her bubble extends from her toward the road so it never runs off the screen edge.
+    const guideH = 88.0, guideW = 58.0;
+    final reachedIdx = stops.lastIndexWhere((s) => widget.deedsDone >= s.threshold); // -1 = at START
+    final markerRightOfRoad = reachedIdx == -1 || xFractions[(reachedIdx + 1) % xFractions.length] < 0.5;
+    // Marker to the right → Guddi on the left of the truck, and vice versa; kept inside the canvas.
+    final guddiLeft = (markerRightOfRoad ? truckPos.dx - 24 - 4 - guideW : truckPos.dx + 24 + 4).clamp(0.0, canvasW - guideW);
+    final guddiTop = truckPos.dy + 30 - guideH; // feet level with the truck's base
+    out.add(Positioned(
+      left: guddiLeft,
+      top: guddiTop,
+      child: IgnorePointer(child: SizedBox(width: guideW, child: _RoadGuddi(pose: complete ? GuddiPoses.strong : GuddiPoses.chatty, height: guideH))),
+    ));
+    final bubble = IgnorePointer(child: _RoadBubble(complete ? 'Road complete! 💪' : 'Bas ${stops[nextIdx].threshold - widget.deedsDone} aur!'));
+    out.add(markerRightOfRoad
+        ? Positioned(left: guddiLeft, top: guddiTop - 30, child: bubble)
+        : Positioned(right: canvasW - guddiLeft - guideW, top: guddiTop - 30, child: bubble));
+    return out;
   }
 
   @override
@@ -622,6 +671,8 @@ class _RoadViewState extends State<_RoadView> with SingleTickerProviderStateMixi
           width: w,
           height: canvasH,
           child: Stack(
+            // Not clipped: Guddi near the final stop can reach above the canvas's top edge.
+            clipBehavior: Clip.none,
             children: [
               Positioned.fill(child: CustomPaint(painter: _RoadPainter(points: points, roadColor: widget.campaign.roadColor(AppColors.oliveCardStrong)))),
               // Truck rendered BEFORE the stop markers now, not after — real bug fixed here.
@@ -699,11 +750,92 @@ class _RoadViewState extends State<_RoadView> with SingleTickerProviderStateMixi
                 top: points.first.dy - 10,
                 child: Text('START', style: AppFonts.plexMono(size: 9, color: AppColors.textSoft)),
               ),
+              // Guddi on the journey (presentation only, never blocks taps):
+              //  - a small cheer-Guddi badge on every claimed stop
+              //  - Guddi as the guide above the next stop still to reach ("Bas N aur!")
+              //  - strong Guddi at the final stop ("Road complete! 💪" once reached)
+              for (var i = 0; i < widget.stops.length; i++)
+                if (widget.claimedStopIds.contains(widget.stops[i].id) && i != widget.stops.length - 1)
+                  Positioned(
+                    left: _markerLeft(points, xFractions, i) + 38,
+                    top: points[i + 1].dy - 38,
+                    child: IgnorePointer(child: _GuddiBadge(pose: GuddiPoses.cheer)),
+                  ),
+              ..._roadGuddi(points, xFractions, truckPos, w),
             ],
           ),
         ),
       );
     });
+  }
+}
+
+// Guddi standing on the road, bobbing gently; fades out at the bottom (waist-cropped poses).
+class _RoadGuddi extends StatefulWidget {
+  final String pose;
+  final double height;
+  const _RoadGuddi({required this.pose, required this.height});
+  @override
+  State<_RoadGuddi> createState() => _RoadGuddiState();
+}
+
+class _RoadGuddiState extends State<_RoadGuddi> with SingleTickerProviderStateMixin {
+  late final AnimationController _bob = AnimationController(vsync: this, duration: const Duration(milliseconds: 1800))..repeat(reverse: true);
+  @override
+  void dispose() {
+    _bob.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _bob,
+      builder: (_, child) => Transform.translate(offset: Offset(0, -3 * Curves.easeInOut.transform(_bob.value)), child: child),
+      child: ShaderMask(
+        blendMode: BlendMode.dstIn,
+        shaderCallback: (r) => const LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Colors.white, Colors.white, Colors.transparent],
+          stops: [0, 0.78, 1],
+        ).createShader(r),
+        child: Image.asset(widget.pose, height: widget.height, fit: BoxFit.contain),
+      ),
+    );
+  }
+}
+
+class _RoadBubble extends StatelessWidget {
+  final String text;
+  const _RoadBubble(this.text);
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+      decoration: BoxDecoration(
+        color: AppColors.bg2.withOpacity(0.92),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppColors.gold.withOpacity(0.5)),
+      ),
+      child: Text(text, style: AppFonts.inter(size: 11, weight: FontWeight.w700, color: AppColors.text)),
+    );
+  }
+}
+
+// Small round cheer-Guddi badge pinned to a claimed stop.
+class _GuddiBadge extends StatelessWidget {
+  final String pose;
+  const _GuddiBadge({required this.pose});
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 30, height: 30,
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(shape: BoxShape.circle, color: AppColors.bg2, border: Border.all(color: AppColors.gold, width: 1.5)),
+      child: Image.asset(pose, fit: BoxFit.cover, alignment: const Alignment(0, -0.85)),
+    );
   }
 }
 
