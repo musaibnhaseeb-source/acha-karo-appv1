@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import 'confetti_overlay.dart';
+import 'guddi_home.dart';
+import '../data/guddi_content.dart';
 
 // Ported from the original's DAILY_MILESTONE_CAPTIONS / playDailyMilestoneAnim() — this never
 // existed in the Flutter port until now. Same three thresholds, same exact Urdu text.
@@ -50,12 +52,19 @@ class _DailyMilestoneAnimationState extends State<DailyMilestoneAnimation> with 
         ConfettiLayer(controller: _confettiController, pieces: _pieces),
         Center(
           child: Column(mainAxisSize: MainAxisSize.min, children: [
+            // 3 deeds: wink + thumbs up. 5 and 7 are the big ones: sword-hilt "getting stronger".
+            GuddiPopIn(pose: widget.threshold >= 5 ? GuddiPoses.strong : GuddiPoses.cheer),
+            const SizedBox(height: 26),
             PopInText(delay: Duration.zero, child: Text(milestoneText(widget.threshold, widget.gender), style: AppFonts.nastaliq(size: 40, color: AppColors.gold))),
             const SizedBox(height: 8),
             PopInText(
               delay: const Duration(milliseconds: 300),
               child: Text(milestoneCaption(widget.threshold), style: AppFonts.plexMono(size: 11, weight: FontWeight.w700, color: AppColors.text).copyWith(decoration: TextDecoration.none)),
             ),
+            if (widget.threshold >= 5) ...[
+              const SizedBox(height: 10),
+              const PopInText(delay: Duration(milliseconds: 500), child: GuddiCaption(GuddiCelebrationLines.strong)),
+            ],
           ]),
         ),
       ]),

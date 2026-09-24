@@ -6,6 +6,8 @@ import '../theme/app_theme.dart';
 import '../state/app_state.dart';
 import '../data/deed_catalog.dart';
 import '../data/deed_form_fields.dart';
+import '../data/guddi_content.dart';
+import 'guddi_home.dart';
 
 // Rebuilt per the simplified submission design: Photo mode is now the ONLY way to submit — no
 // Honor mode, no location choice (GPS is captured automatically instead), no free-text or plain
@@ -16,7 +18,10 @@ class SubmitDeedModal extends StatefulWidget {
   final String type;
   final String? campaignId; // new — tags the resulting deed so campaign-specific roadmap
   // progress can be counted correctly, especially when multiple campaigns run simultaneously
-  const SubmitDeedModal({super.key, required this.type, this.campaignId});
+  // Optional Guddi tip shown under the photo picker — e.g. "photograph the deed, not the person"
+  // for deeds that involve helping someone (passed in from Home's idea card).
+  final GuddiLine? photoHint;
+  const SubmitDeedModal({super.key, required this.type, this.campaignId, this.photoHint});
   @override
   State<SubmitDeedModal> createState() => _SubmitDeedModalState();
 }
@@ -139,6 +144,25 @@ class _SubmitDeedModalState extends State<SubmitDeedModal> {
                     ]),
                   ),
                 ]),
+                if (widget.photoHint != null) ...[
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.fromLTRB(6, 6, 12, 6),
+                    decoration: BoxDecoration(color: AppColors.oliveCard, borderRadius: BorderRadius.circular(12)),
+                    child: Row(children: [
+                      // Guddi "explaining" (chalk) — her tips pose.
+                      Image.asset(GuddiPoses.explain, height: 48, fit: BoxFit.contain),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          Text(widget.photoHint!.roman, style: AppFonts.inter(size: 12, weight: FontWeight.w600)),
+                          if (widget.photoHint!.en != null)
+                            Text(widget.photoHint!.en!, style: AppFonts.inter(size: 10.5, color: AppColors.textSoft)),
+                        ]),
+                      ),
+                    ]),
+                  ),
+                ],
                 const SizedBox(height: 10),
                 Text(
                   'Any image deemed inappropriate or harassing may result in your account being flagged for moderator review.',

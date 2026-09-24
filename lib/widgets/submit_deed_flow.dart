@@ -8,13 +8,14 @@ import 'daily_milestone_animation.dart';
 import 'tier_up_animation.dart';
 import 'first_deed.dart';
 import '../utils/daily_reminder.dart';
+import '../data/guddi_content.dart';
 
 // Extracted from HomeScreen's _openSubmitModal — was private to that one screen, now shared so
 // the campaign quick-action CTA (and anywhere else that needs this later) gets the exact same
 // complete flow: real GPS capture, real moderation checks, real cooldowns, full animation
 // sequence. Nothing about coming from a campaign skips any of that — it's the identical code
 // path as tapping a category deed on Home.
-void openSubmitDeedFlow(BuildContext context, String type, {String? campaignId}) {
+void openSubmitDeedFlow(BuildContext context, String type, {String? campaignId, GuddiLine? photoHint}) {
   // Captured before submitting — only true when real history has loaded and it's empty, so the
   // first-deed celebration can never fire from an unknown/unloaded state.
   final isFirstDeed = context.read<AppState>().needsFirstDeed;
@@ -22,7 +23,7 @@ void openSubmitDeedFlow(BuildContext context, String type, {String? campaignId})
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
-    builder: (_) => SubmitDeedModal(type: type, campaignId: campaignId),
+    builder: (_) => SubmitDeedModal(type: type, campaignId: campaignId, photoHint: photoHint),
   ).then((result) async {
     if (result is! SubmitResult || !context.mounted) return;
     // Real fix here too — this used to celebrate with the thank-you animation regardless of

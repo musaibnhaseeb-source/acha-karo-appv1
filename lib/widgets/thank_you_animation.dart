@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import 'confetti_overlay.dart';
+import 'guddi_home.dart';
 
 // Replaces the original's per-category emoji-burst animations (env/animal/civic/social/health
 // each had their own emoji set) with one simplified universal animation, per the simplification
@@ -44,6 +45,8 @@ class _ThankYouAnimationState extends State<ThankYouAnimation> with SingleTicker
         ConfettiLayer(controller: _confettiController, pieces: _pieces),
         Center(
           child: Column(mainAxisSize: MainAxisSize.min, children: [
+            const GuddiPopIn(pose: GuddiPoses.cheer), // wink + thumbs up
+            const SizedBox(height: 26),
             PopInText(delay: Duration.zero, child: Text('شکریہ', style: AppFonts.nastaliq(size: 40, color: AppColors.gold))),
             const SizedBox(height: 8),
             PopInText(

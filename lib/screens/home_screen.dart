@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -7,6 +8,7 @@ import '../state/app_state.dart';
 import '../data/deed_catalog.dart';
 import '../data/tiers.dart';
 import '../widgets/submit_deed_flow.dart';
+import '../data/guddi_content.dart';
 import '../widgets/cooldowns_sheet.dart';
 import '../widgets/home_side_sheet.dart';
 import 'town_voice_screen.dart';
@@ -19,6 +21,8 @@ import '../utils/onboarding_store.dart';
 import '../utils/daily_reminder.dart';
 import '../widgets/guddi_tour.dart';
 import '../widgets/first_deed.dart';
+import '../widgets/guddi_home.dart';
+import '../utils/deed_streak.dart';
 
 String _formatRemaining(Duration d) {
   final mins = (d.inSeconds / 60).ceil();
@@ -47,6 +51,45 @@ class _HomeScreenState extends State<HomeScreen> {
   final _leaderboardKey = GlobalKey();
   bool _tourConsidered = false;
   bool _tourRunning = false;
+
+  // Guddi's mood and the week row depend on the clock — re-check once a minute and rebuild only
+  // when the day or the time-of-day band actually changes.
+  Timer? _clockTimer;
+  String _clockBand = _bandFor(DateTime.now());
+  bool _posesPrecached = false;
+
+  static String _bandFor(DateTime t) {
+    final h = t.hour;
+    final band = h < 5 ? 0 : h < 12 ? 1 : h < 17 ? 2 : h < 21 ? 3 : 4;
+    return '${t.year}-${t.month}-${t.day}-$band';
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _clockTimer = Timer.periodic(const Duration(minutes: 1), (_) {
+      final band = _bandFor(DateTime.now());
+      if (band != _clockBand && mounted) setState(() => _clockBand = band);
+    });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Small WebPs; decoding them up front means pose changes and celebrations never flash empty.
+    if (!_posesPrecached) {
+      _posesPrecached = true;
+      for (final pose in {...GuddiPoses.homePoses, ...GuddiPoses.celebrationPoses}) {
+        precacheImage(AssetImage(pose), context);
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _clockTimer?.cancel();
+    super.dispose();
+  }
 
   // Deeds are something you DO — new copy never says log / write / tell.
   static const _stepLogDeedEn = 'Did something kind today? Tap a circle to start.';
@@ -142,6 +185,23 @@ class _HomeScreenState extends State<HomeScreen> {
     if (!_tourConsidered) WidgetsBinding.instance.addPostFrameCallback((_) => _maybeStartTour());
     final showFirstDeedBubble = state.needsFirstDeed && _tourConsidered && !_tourRunning;
 
+    // Real streak / week row / Guddi mood — all from this user's own loaded deed history.
+    final now = guddiClock();
+    final today = dateOnly(now);
+    final activeDays = activeDeedDays(state.deedsLog.map((d) => (createdAt: d.createdAt, status: d.status)));
+    final doneToday = activeDays.contains(today);
+    final streak = currentStreak(activeDays, now);
+    final mood = pickGuddiHomeMood(
+      now: now,
+      historyLoaded: state.deedHistoryLoaded,
+      needsFirstDeed: state.needsFirstDeed,
+      doneToday: doneToday,
+      rejectedTodayOnly: state.loggedDeedToday && !doneToday,
+      streak: streak,
+      daysSinceLast: daysSinceLastActive(activeDays, now),
+    );
+    final idea = pickTodaysIdea(today, (type) => state.cooldownRemaining(type) > Duration.zero);
+
     return Scaffold(
       key: _scaffoldKey,
       backgroundColor: Colors.transparent,
@@ -209,24 +269,18 @@ class _HomeScreenState extends State<HomeScreen> {
             ],
           ),
           const SizedBox(height: 12),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(state.user.name.split(' ').first, style: AppFonts.fraunces(size: 22, weight: FontWeight.w600)),
-                if (state.membershipNumber != null) ...[
-                  const SizedBox(height: 2),
-                  Text(state.membershipNumber!, style: AppFonts.plexMono(size: 9)),
-                ],
-              ]),
-              Row(children: [
-                Text(tier.icon, style: const TextStyle(fontSize: 22)),
-                const SizedBox(width: 4),
-                Text(tier.name, style: AppFonts.nastaliq(size: 22, color: AppColors.gold)),
-              ]),
-            ],
+          // Name + Guddi's line on the left, Guddi on the right.
+          GuddiHomeHeader(
+            mood: mood,
+            nameBlock: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(state.user.name.split(' ').first, style: AppFonts.fraunces(size: 22, weight: FontWeight.w600)),
+              if (state.membershipNumber != null) ...[
+                const SizedBox(height: 2),
+                Text(state.membershipNumber!, style: AppFonts.plexMono(size: 9)),
+              ],
+            ]),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 8),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             crossAxisAlignment: CrossAxisAlignment.end,
@@ -235,8 +289,22 @@ class _HomeScreenState extends State<HomeScreen> {
                 Text('TOTAL POINTS', style: AppFonts.plexMono(size: 9)),
                 Text('${state.user.points}', style: AppFonts.fraunces(size: 28, weight: FontWeight.w700, color: AppColors.gold)),
               ]),
-              Text('🔥 ${state.user.streak} day streak', style: AppFonts.plexMono(size: 11)),
+              Row(children: [
+                Text(tier.icon, style: const TextStyle(fontSize: 22)),
+                const SizedBox(width: 4),
+                Text(tier.name, style: AppFonts.nastaliq(size: 22, color: AppColors.gold)),
+              ]),
             ],
+          ),
+          // Week row + streak only once real deed history has loaded — never a guessed/zero state.
+          if (state.deedHistoryLoaded) ...[
+            const SizedBox(height: 12),
+            WeekRowCard(weekDays: currentWeekDays(now), activeDays: activeDays, today: today, streak: streak),
+          ],
+          const SizedBox(height: 10),
+          AchaKaamIdeaCard(
+            idea: idea,
+            onDo: state.isGlobalCooldownActive ? null : () => openSubmitDeedFlow(context, idea.deedType, photoHint: idea.involvesPerson ? kPhotoTheDeedHint : null),
           ),
           const SizedBox(height: 22),
           // Heading + rings wrapped together as one spotlight target for the Guddi tour.
@@ -430,7 +498,7 @@ class _HomeScreenState extends State<HomeScreen> {
   int _computeRank(AppState state) => state.myRank; // real leaderboard data only, see AppState.myRank
 
   String _greeting() {
-    final hour = DateTime.now().hour;
+    final hour = guddiClock().hour;
     if (hour < 5) return 'Good night';
     if (hour < 12) return 'Good morning';
     if (hour < 17) return 'Good afternoon';
