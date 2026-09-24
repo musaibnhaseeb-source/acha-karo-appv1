@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:geolocator/geolocator.dart';
 import '../data/deed_catalog.dart';
+import '../utils/public_name.dart';
 import '../data/badges.dart';
 import '../data/tiers.dart';
 import '../utils/notifications.dart';
@@ -531,7 +532,7 @@ class AppState extends ChangeNotifier {
         return;
       }
       final profiles = await Supabase.instance.client.rpc('get_public_profiles', params: {'ids': requesterIds}) as List<dynamic>;
-      final namesById = {for (final p in profiles) p['id'] as String: p['name'] as String? ?? 'Friend'};
+      final namesById = {for (final p in profiles) p['id'] as String: publicDisplayName(p['name'] as String?, fallback: 'Friend')};
       pendingFriendRequests = rows
           .map<PendingFriendRequest>((r) => PendingFriendRequest(
                 id: r['id'] as String,
@@ -664,7 +665,7 @@ class AppState extends ChangeNotifier {
       }
       realLeaderboard = profileRows.map<RealLeaderboardEntry>((r) => RealLeaderboardEntry(
             id: r['id'] as String,
-            name: r['name'] as String? ?? 'User',
+            name: publicDisplayName(r['name'] as String?),
             city: r['city'] as String? ?? '',
             points: r['points'] as int? ?? 0,
             badgeCount: badgeCounts[r['id']] ?? 0,
@@ -677,7 +678,8 @@ class AppState extends ChangeNotifier {
       final weeklyRows = await Supabase.instance.client.rpc('get_weekly_leaderboard') as List<dynamic>;
       weeklyLeaderboard = weeklyRows.map<RealLeaderboardEntry>((r) => RealLeaderboardEntry(
             id: r['user_id'] as String,
-            name: r['name'] as String? ?? 'User',
+            // Your own weekly row keeps your name as you typed it; everyone else is "First L."
+            name: r['user_id'] == Supabase.instance.client.auth.currentUser?.id ? user.name : publicDisplayName(r['name'] as String?),
             city: r['city'] as String? ?? '',
             points: r['weekly_points'] as int? ?? 0,
             badgeCount: 0,
@@ -716,7 +718,7 @@ class AppState extends ChangeNotifier {
       var namesById = <String, String>{};
       if (otherIds.isNotEmpty) {
         final profiles = await Supabase.instance.client.rpc('get_public_profiles', params: {'ids': otherIds}) as List<dynamic>;
-        namesById = {for (final p in profiles) p['id'] as String: p['name'] as String? ?? 'Friend'};
+        namesById = {for (final p in profiles) p['id'] as String: publicDisplayName(p['name'] as String?, fallback: 'Friend')};
       }
 
       assignedByMe = byMeRows.map<AssignedDeed>((r) => AssignedDeed(
@@ -1529,7 +1531,7 @@ class AppState extends ChangeNotifier {
       final otherIds = rows.map<String>((r) => r['requester_id'] == uid ? r['addressee_id'] as String : r['requester_id'] as String).toList();
       if (otherIds.isNotEmpty) {
         final otherProfiles = await Supabase.instance.client.rpc('get_public_profiles', params: {'ids': otherIds}) as List<dynamic>;
-        final namesById = {for (final p in otherProfiles) p['id'] as String: p['name'] as String? ?? 'Friend'};
+        final namesById = {for (final p in otherProfiles) p['id'] as String: publicDisplayName(p['name'] as String?, fallback: 'Friend')};
         friends = rows.map<FriendEntry>((r) {
           final isRequester = r['requester_id'] == uid;
           final otherId = isRequester ? r['addressee_id'] as String : r['requester_id'] as String;
