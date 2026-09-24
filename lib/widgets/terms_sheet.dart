@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../theme/app_theme.dart';
 
-// New — the real, full T&Cs document, shown as a genuine popup rather than a separate screen or
-// external link, per direction. Both "Today's date" placeholders in the source document replaced
-// with the real, specified date (1 Sep 2026). Structured as data (heading + paragraphs/bullets)
-// rendered programmatically, rather than hand-built Text widgets per section — reduces the real
-// risk of a transcription slip somewhere in a document this long, and makes it easy to verify
-// section-by-section against the source.
+// App Terms of Use — the same copy as the website's Terms (v3, approved by Musa 2026-09-25;
+// source: Marketing/terms-faq-draft.md "TERMS OF USE" + "URDU SUMMARY"), worded for the app
+// ("on our Help page" instead of "above"). Keep the two in sync. Campaign-specific terms are
+// separate (remote_config termsAndConditions) and unaffected. Structured as data (heading +
+// paragraphs/bullets) so it's easy to check section-by-section against the source.
 class _Section {
   final String heading;
   final List<String> paragraphs; // plain paragraphs
@@ -14,121 +14,82 @@ class _Section {
   const _Section(this.heading, {this.paragraphs = const [], this.bullets = const []});
 }
 
-const _effectiveDate = '1 September 2026';
+// TODO(Musa): confirm the "Last updated" date — the website copy still has it as a placeholder.
+const _lastUpdated = '25 September 2026';
+const kHelpContactUrl = 'https://achakaro.vercel.app/help.html#contact';
 
-final List<_Section> _sections = [
-  const _Section('1. About Acha Karo', paragraphs: [
-    'Acha Karo is a digital platform designed to encourage positive actions, community participation, learning, challenges, campaigns and recognition.',
-    'The platform may include points, badges, digital items, campaigns, challenges, leaderboards, rewards and opportunities to participate in content or community activities.',
+const List<_Section> _sections = [
+  _Section('1. What Acha Karo is', paragraphs: [
+    'Acha Karo is a free app that encourages everyday acha kaam across Pakistan. You do an acha kaam, share a photo, earn points and badges, and see how your city is doing. By using the app, you agree to these terms.',
   ]),
-  const _Section('2. Eligibility and Minors', paragraphs: [
-    'Users must provide accurate information when creating an account.',
-    'Users under the age of 18 must use Acha Karo with the knowledge, permission and appropriate supervision of a parent or legal guardian.',
-    'Parents or guardians are responsible for determining whether a particular activity, challenge, campaign or task is appropriate and safe for a minor.',
-    'Acha Karo does not require or encourage minors to undertake activities that are unsafe, illegal, dangerous or inappropriate for their age.',
-    'If a challenge or activity involves leaving home, interacting with another person, visiting a location, handling an object, or performing any physical activity, users and their parents/guardians are responsible for assessing whether it is safe and appropriate.',
+  _Section('2. Who can use it', paragraphs: [
+    "You must be 16 or older. One account per person. Keep your login private, because you're responsible for what happens on your account.",
   ]),
-  const _Section('3. Personal Responsibility and Safety', paragraphs: [
-    'Acha Karo encourages positive participation but does not control the circumstances in which users carry out activities.',
-    'Users participate in challenges, deeds and activities voluntarily and at their own discretion and risk.',
-    'Users must not undertake an activity merely to obtain points, badges, rewards or campaign progress if doing so could reasonably place themselves or another person in danger.',
-    'Acha Karo is not responsible for injuries, losses, damage or other consequences arising from a user\'s participation in an activity that is outside Acha Karo\'s direct control, including activities performed independently by the user or activities undertaken contrary to safety instructions.',
-    'Safety takes priority over completing a campaign.',
+  _Section('3. Points', bullets: [
+    'Acha Karo points are in-app points only. They have no cash value, and no purchase is needed.',
+    "They can't be sold, exchanged, transferred or cashed out.",
+    'We may correct or remove points that were given by mistake or earned by breaking these terms.',
+    "Bonus points in any campaign follow that campaign's own rules page.",
   ]),
-  const _Section('4. Deeds, Challenges and Campaigns', paragraphs: [
-    'Users must honestly report deeds and complete campaign activities as described.',
-    'Users must not:',
-  ], bullets: [
-    'falsely claim to have completed an activity',
-    'submit fraudulent or misleading information',
-    'create multiple accounts to gain additional points or rewards',
-    'manipulate leaderboards or campaign progress',
-    'exploit technical errors or bugs',
-    'impersonate another person',
-    'interfere with another user\'s account or participation',
+  _Section('4. Your acha kaam submissions', bullets: [
+    'Only submit acha kaam you really did, with photos you took yourself.',
+    "Photograph the acha kaam, not the person. Never show a child's face, and don't show anyone's private details.",
+    "By submitting, you let Acha Karo store your photo and its location so we can check it. We'll only post your photo on social media with your permission.",
+    'Most acha kaam are approved automatically. Some are checked by our team, usually within 48 hours. We can review, approve or reject any acha kaam, and our decision is final.',
   ]),
-  const _Section('', paragraphs: [
-    'Acha Karo may remove fraudulent entries, points, badges, campaign progress or rewards and may restrict or suspend accounts involved in abuse or manipulation.',
+  _Section("5. What's not allowed", paragraphs: [
+    'Fake, copied or repeated submissions; multiple accounts; gaming the leaderboard; harassing other users; anything illegal, hateful or sexual; tampering with the app or pretending to be Acha Karo. We can suspend or remove accounts that break these rules.',
   ]),
-  const _Section('5. Points, Badges and Digital Rewards', paragraphs: [
-    'Points, badges, skins, medals, digital collectibles and other campaign items are provided for participation and recognition.',
-    'Unless specifically stated otherwise:',
-  ], bullets: [
-    'points have no cash value',
-    'points cannot be exchanged for money',
-    'points cannot be transferred between users',
-    'digital items do not represent ownership of any company, asset or security',
-    'Acha Karo may modify campaign rules, point values or availability where reasonably necessary',
+  _Section('6. Your data', bullets: [
+    'We collect only what the app needs (see Privacy on our Help page).',
+    'Other users see your first name and last initial, city, points and badge count. A nickname is fine.',
+    'We may use acha kaam locations to find areas that need help, and share area-level summaries with partner NGOs. We never share your name, your profile or your exact location.',
+    "We don't sell your data or show ads.",
+    'If you delete your account, we delete it within 30 days, along with your acha kaam, photos and locations.',
+    'We keep contact form messages for 3 months.',
   ]),
-  const _Section('', paragraphs: [
-    'Campaign-specific rewards are subject to the rules displayed for that campaign.',
+  _Section('7. Installing the app', paragraphs: [
+    "Download Acha Karo only from achakaro.vercel.app or the link in our official social media bios. We're not responsible for copies downloaded from anywhere else.",
   ]),
-  const _Section('6. Campaign Changes', paragraphs: [
-    'Campaigns may be temporary and may be changed, paused, extended or discontinued because of technical problems, safety concerns, availability, operational requirements or other circumstances.',
-    'Acha Karo will make reasonable efforts to communicate material changes through the application or other official channels.',
+  _Section('8. The app is still growing', paragraphs: [
+    "Acha Karo is new and still in a pilot phase. Features may change, and things may occasionally break. We'll fix problems as quickly as we can, but the app is provided as it is.",
   ]),
-  const _Section('7. User Content and Submissions', paragraphs: [
-    'Users may be invited to submit ideas, suggestions, photographs, artwork, writing, videos or other material.',
-    'Users must only submit material that they have the right to submit.',
-    'By voluntarily submitting material for an Acha Karo campaign or co-creation activity, the user grants Acha Karo permission to use, reproduce, adapt, display and publish that material for Acha Karo\'s platform, campaigns, promotional activities and related communications, without requiring additional payment unless a separate written agreement states otherwise.',
-    'Acha Karo does not claim ownership of a user\'s original work merely because it has been submitted.',
+  _Section('9. Changes', paragraphs: [
+    "If we change these terms, we'll update them here and the date at the top. If you keep using the app after a change, you accept the new terms.",
   ]),
-  const _Section('8. Co-Creation and Certificates', paragraphs: [
-    'Certain campaigns may provide opportunities to participate in content development or other co-creation activities.',
-    'Where Acha Karo issues a certificate or experience letter, it will describe the participation or contribution actually made by the user.',
-    'Receiving a certificate or experience letter does not constitute employment by Acha Karo unless a separate employment agreement exists.',
+  _Section('10. Not affiliated', paragraphs: [
+    'Acha Karo is not sponsored, endorsed or administered by, or associated with, Instagram, Meta, TikTok or Google.',
   ]),
-  const _Section('9. Third-Party Content', paragraphs: [
-    'Acha Karo may link to or display content hosted by third parties, including YouTube and other websites or services.',
-    'Acha Karo does not control third-party platforms and is not responsible for their availability, policies, content or terms.',
-    'Users should review the applicable third-party terms when using those services.',
+  _Section('11. Governing law', paragraphs: [
+    'These terms are governed by the laws of Pakistan.',
   ]),
-  const _Section('10. Intellectual Property', paragraphs: [
-    'The Acha Karo name, logo, application design, original artwork, campaign materials, software and other Acha Karo-created content belong to Acha Karo or its respective licensors unless otherwise stated.',
-    'Users may not copy, modify, distribute, sell or commercially exploit Acha Karo\'s proprietary material without permission.',
-  ]),
-  const _Section('11. Account Suspension', paragraphs: [
-    'Acha Karo may suspend or terminate an account where it reasonably believes that the user:',
-  ], bullets: [
-    'has violated these Terms',
-    'has engaged in fraud or manipulation',
-    'has submitted unlawful or harmful material',
-    'has abused other users',
-    'has attempted to compromise or misuse the platform',
-  ]),
-  const _Section('12. Availability', paragraphs: [
-    'Acha Karo is provided on an evolving basis. As a startup and pilot platform, features may be added, removed, changed or temporarily unavailable.',
-    'We do not guarantee that the application or every feature will always be available, uninterrupted or error-free.',
-  ]),
-  const _Section('13. Privacy', paragraphs: [
-    'Your use of Acha Karo is also subject to our Privacy Policy, which explains what personal information we collect, why we collect it and how it may be used.',
-    'The Privacy Policy forms part of these Terms.',
-  ]),
-  const _Section('14. Limitation of Responsibility', paragraphs: [
-    'Acha Karo will take reasonable steps to operate the platform responsibly. However, Acha Karo cannot control every activity performed by users outside the application.',
-    'Nothing in these Terms is intended to exclude or limit any liability that cannot lawfully be excluded or limited under applicable law.',
-  ]),
-  const _Section('15. Changes to These Terms', paragraphs: [
-    'We may update these Terms as Acha Karo develops.',
-    'When material changes are made, we may notify users through the application or another appropriate method.',
-    'Continued use of Acha Karo after an updated version becomes effective constitutes acceptance of the updated Terms, to the extent permitted by applicable law.',
-  ]),
-  const _Section('16. Governing Law', paragraphs: [
-    'These Terms are intended to be governed by the laws of the Islamic Republic of Pakistan, subject to any mandatory legal rights available to the user.',
-  ]),
-  const _Section('17. Contact', paragraphs: [
-    'For questions, complaints or concerns regarding these Terms, reach out to us by submitting a feedback.',
-  ]),
-  const _Section('User Agreement', paragraphs: [
-    'By selecting "I Agree" and creating an Acha Karo account, you confirm that:',
-  ], bullets: [
-    'you have read and understood these Terms & Conditions',
-    'the information you provide is accurate',
-    'you will participate honestly and responsibly',
-    'if you are under 18, you have the knowledge and appropriate supervision of a parent or legal guardian',
-    'you understand that safety takes priority over completing any Acha Karo campaign or challenge',
+  _Section('12. Contact', paragraphs: [
+    'Questions, complaints or concerns? Use the contact form on our Help page.',
   ]),
 ];
+
+// Urdu summary (خلاصہ) — same approved copy as the website.
+const List<String> _urduSummary = [
+  'اچھا کرو ایک مفت ایپ ہے۔ اچھا کام کریں، تصویر لیں، اور پوائنٹس اور بیجز حاصل کریں۔ عمر 16 سال یا اس سے زیادہ، ایک شخص ایک اکاؤنٹ۔',
+  'پوائنٹس صرف ایپ کے اندر ہیں۔ ان کی کوئی نقد قیمت نہیں، اور کچھ خریدنے کی ضرورت نہیں۔',
+  'زیادہ تر اچھے کام فوراً منظور ہو جاتے ہیں۔ کچھ ہماری ٹیم چیک کرتی ہے، عموماً 48 گھنٹوں کے اندر۔',
+  'آپ کا درجہ (چوزہ سے شاہین تک) بیجز کی تعداد سے طے ہوتا ہے۔',
+  'دوسرے صارفین آپ کا پہلا نام اور آخری نام کا پہلا حرف، شہر، پوائنٹس اور بیجز دیکھ سکتے ہیں۔ آپ فرضی نام بھی استعمال کر سکتے ہیں۔',
+  'اچھے کام کی تصویر اور لوکیشن صرف ہماری ٹیم دیکھتی ہے۔ ہم مدد کی ضرورت والے علاقے ڈھونڈنے کے لیے لوکیشنز استعمال کر سکتے ہیں اور پارٹنر این جی اوز کے ساتھ صرف علاقے کی سطح کا خلاصہ شیئر کر سکتے ہیں، کبھی آپ کا نام، پروفائل یا درست لوکیشن نہیں۔',
+  'آپ کی تصویر سوشل میڈیا پر صرف آپ کی اجازت سے لگائی جائے گی۔',
+  'اکاؤنٹ ڈیلیٹ کرنے کے لیے: ایپ میں Settings ← Delete account۔ 30 دن کے اندر اکاؤنٹ، اچھے کام، تصویریں اور لوکیشنز سب ڈیلیٹ کر دیے جاتے ہیں۔',
+  'رابطہ فارم کے پیغامات 3 ماہ تک رکھے جاتے ہیں۔',
+  'ایپ صرف achakaro.vercel.app یا ہمارے آفیشل سوشل میڈیا بائیو کے لنک سے ڈاؤن لوڈ کریں۔',
+  'یہ شرائط پاکستان کے قوانین کے تحت ہیں۔ کسی بھی فرق کی صورت میں انگریزی شرائط لاگو ہوں گی۔',
+];
+
+Future<void> _openContact() async {
+  try {
+    await launchUrl(Uri.parse(kHelpContactUrl), mode: LaunchMode.externalApplication);
+  } catch (_) {
+    // No browser available — nothing else to do.
+  }
+}
 
 void showTermsAndConditions(BuildContext context) {
   showModalBottomSheet(
@@ -146,7 +107,7 @@ void showTermsAndConditions(BuildContext context) {
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
             child: Row(children: [
-              Expanded(child: Text('Terms & Conditions', style: AppFonts.fraunces(size: 17, weight: FontWeight.w600))),
+              Expanded(child: Text('Terms of Use', style: AppFonts.fraunces(size: 17, weight: FontWeight.w600))),
               IconButton(icon: const Icon(Icons.close, color: AppColors.textSoft), onPressed: () => Navigator.of(ctx).pop()),
             ]),
           ),
@@ -157,18 +118,11 @@ void showTermsAndConditions(BuildContext context) {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Effective Date: $_effectiveDate', style: AppFonts.plexMono(size: 10.5, color: AppColors.textSoft)),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Welcome to Acha Karo. By creating an account or using the Acha Karo application, you agree to these Terms & Conditions. If you do not agree, please do not use the application.',
-                    style: AppFonts.inter(size: 12.5, color: AppColors.textSoft, height: 1.6),
-                  ),
-                  const SizedBox(height: 20),
+                  Text('Last updated: $_lastUpdated', style: AppFonts.plexMono(size: 10.5, color: AppColors.textSoft)),
+                  const SizedBox(height: 16),
                   for (final s in _sections) ...[
-                    if (s.heading.isNotEmpty) ...[
-                      Text(s.heading, style: AppFonts.fraunces(size: 14, weight: FontWeight.w600)),
-                      const SizedBox(height: 6),
-                    ],
+                    Text(s.heading, style: AppFonts.fraunces(size: 14, weight: FontWeight.w600)),
+                    const SizedBox(height: 6),
                     for (final p in s.paragraphs) ...[
                       Text(p, style: AppFonts.inter(size: 12, color: AppColors.textSoft, height: 1.6)),
                       const SizedBox(height: 6),
@@ -183,7 +137,33 @@ void showTermsAndConditions(BuildContext context) {
                       ),
                     const SizedBox(height: 14),
                   ],
-                  Text('Last Updated: $_effectiveDate', style: AppFonts.plexMono(size: 10.5, color: AppColors.textSoft)),
+                  // Contact us — opens the Help page's contact form in the browser.
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: _openContact,
+                      style: OutlinedButton.styleFrom(
+                        side: BorderSide(color: AppColors.gold.withOpacity(0.6)),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      icon: const Icon(Icons.open_in_new, size: 16, color: AppColors.gold),
+                      label: Text('Contact us', style: AppFonts.inter(size: 13, weight: FontWeight.w700, color: AppColors.gold)),
+                    ),
+                  ),
+                  const SizedBox(height: 22),
+                  Directionality(
+                    textDirection: TextDirection.rtl,
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text('خلاصہ', style: AppFonts.nastaliq(size: 18, color: AppColors.text)),
+                      const SizedBox(height: 4),
+                      for (final line in _urduSummary)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 6),
+                          child: Text('•  $line', style: AppFonts.nastaliq(size: 13, color: AppColors.textSoft)),
+                        ),
+                    ]),
+                  ),
                 ],
               ),
             ),
