@@ -16,7 +16,9 @@ Future<void> initNotifications() => _init ??= _doInit();
 Future<void> _doInit() async {
   if (kIsWeb) return;
   try {
-    const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
+    // Monochrome status-bar icon (res/drawable/ic_stat_notify.xml). The full-colour launcher icon
+    // used before rendered as a white/grey blob, since Android only uses the icon's alpha.
+    const androidSettings = AndroidInitializationSettings('@drawable/ic_stat_notify');
     const initSettings = InitializationSettings(android: androidSettings);
     await notificationsPlugin.initialize(initSettings);
   } catch (_) {

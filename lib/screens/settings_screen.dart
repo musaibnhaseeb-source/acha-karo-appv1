@@ -192,8 +192,8 @@ class SettingsScreen extends StatelessWidget {
   }
 }
 
-// Local on/off for the daily Guddi reminder (stored on this device only). Turning it on asks for
-// the notification permission if it hasn't been granted yet.
+// Local on/off + time for the daily Guddi reminder (stored on this device only). Turning it on
+// asks for the notification permission if it hasn't been granted yet.
 class _DailyReminderTile extends StatefulWidget {
   const _DailyReminderTile();
   @override
@@ -202,13 +202,15 @@ class _DailyReminderTile extends StatefulWidget {
 
 class _DailyReminderTileState extends State<_DailyReminderTile> {
   bool? _enabled; // null while loading
+  TimeOfDay _time = DailyReminder.defaultTime;
   bool _busy = false;
+  bool _blocked = false; // switched on, but the phone has notifications off for the app
 
   @override
   void initState() {
     super.initState();
-    DailyReminder.isEnabled().then((v) {
-      if (mounted) setState(() => _enabled = v);
+    Future.wait([DailyReminder.isEnabled(), DailyReminder.reminderTime()]).then((r) {
+      if (mounted) setState(() { _enabled = r[0] as bool; _time = r[1] as TimeOfDay; });
     });
   }
 
@@ -219,31 +221,73 @@ class _DailyReminderTileState extends State<_DailyReminderTile> {
     setState(() {
       _enabled = result;
       _busy = false;
+      _blocked = on && !result; // Android won't show the prompt again once it's been refused
     });
-    if (on && !result) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Notifications are off for Acha Karo. Allow them in your phone settings to get reminders.'),
-      ));
-    }
+  }
+
+  Future<void> _changeTime() async {
+    final t = await DailyReminder.pickTime(context, _time);
+    if (t == null || !mounted) return;
+    setState(() => _time = t);
+    await DailyReminder.setReminderTime(t, loggedToday: context.read<AppState>().loggedDeedToday);
   }
 
   @override
   Widget build(BuildContext context) {
+    final on = _enabled ?? false;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
       decoration: BoxDecoration(color: AppColors.oliveCard, borderRadius: BorderRadius.circular(14)),
-      child: Row(children: [
-        Expanded(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('Daily reminder from Guddi', style: AppFonts.inter(size: 13, weight: FontWeight.w600)),
-            const SizedBox(height: 2),
-            Text('One gentle nudge at 8:30 pm', style: AppFonts.inter(size: 11, color: AppColors.textSoft)),
-          ]),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('Daily reminder from Guddi', style: AppFonts.inter(size: 13, weight: FontWeight.w600)),
+              const SizedBox(height: 2),
+              Text('One gentle nudge at ${DailyReminder.formatTime(_time)}', style: AppFonts.inter(size: 11, color: AppColors.textSoft)),
+            ]),
+          ),
+          Switch(
+            value: on,
+            activeTrackColor: AppColors.gold,
+            onChanged: (_enabled == null || _busy) ? null : _toggle,
+          ),
+        ]),
+        // Time can be picked any time, even while off — it's used as soon as reminders are on.
+        TextButton.icon(
+          style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: const Size(0, 36), tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+          onPressed: _enabled == null ? null : _changeTime,
+          icon: const Icon(Icons.schedule, size: 16, color: AppColors.gold),
+          label: Text('Change time', style: AppFonts.inter(size: 12, weight: FontWeight.w600, color: AppColors.gold)),
         ),
-        Switch(
-          value: _enabled ?? false,
-          activeTrackColor: AppColors.gold,
-          onChanged: (_enabled == null || _busy) ? null : _toggle,
+        if (_blocked) ...[
+          const SizedBox(height: 4),
+          Text(
+            'Notifications are turned off for Acha Karo on this phone. To allow them: Settings → Apps → Acha Karo → Notifications → turn on. Then switch the reminder on again here.',
+            style: AppFonts.inter(size: 11, color: const Color(0xFFE39B84), height: 1.4),
+          ),
+        ],
+        Theme(
+          data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+          child: ExpansionTile(
+            tilePadding: EdgeInsets.zero,
+            childrenPadding: const EdgeInsets.only(bottom: 4),
+            dense: true,
+            iconColor: AppColors.textSoft,
+            collapsedIconColor: AppColors.textSoft,
+            title: Text('Reminders not arriving?', style: AppFonts.inter(size: 12, weight: FontWeight.w600, color: AppColors.textSoft)),
+            children: [
+              Text(
+                'Some phones (for example Xiaomi, Oppo, Vivo, Infinix and Tecno) stop apps in the background to save battery, which can block reminders:\n'
+                "1. Open your phone's Settings → Apps → Acha Karo.\n"
+                '2. Under Battery, choose "No restrictions" (or turn off battery optimisation).\n'
+                '3. If you see "Auto-start" or "Allow background activity", turn it on.\n'
+                '4. Make sure Notifications are allowed.\n'
+                'Opening Acha Karo also refreshes your reminders.',
+                style: AppFonts.inter(size: 11, color: AppColors.textSoft, height: 1.45),
+              ),
+            ],
+          ),
         ),
       ]),
     );

@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart' show TimeOfDay;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:acha_karo/utils/daily_reminder.dart';
 
@@ -58,5 +59,29 @@ void main() {
       expect(ur, isNotEmpty);
       expect(en.toLowerCase().contains('streak'), isFalse);
     }
+  });
+
+  group('chosen reminder time', () {
+    test('every reminder lands at the chosen local time, same back-off', () {
+      final p = DailyReminder.plan(now: morning, loggedToday: false, startMessage: 0, hour: 7, minute: 15);
+      for (final (at, _) in p) {
+        expect((at.hour, at.minute), (7, 15));
+      }
+      // 7:15 am already passed at 9:00 → starts tomorrow; back-off spacing unchanged.
+      expect(p.first.$1, DateTime(2026, 9, 25, 7, 15));
+      expect(p.map((e) => e.$1.difference(p.first.$1).inDays).toList(), [0, 1, 2, 4, 6, 8, 10, 17, 24, 31]);
+    });
+
+    test('a later time today is still used today', () {
+      expect(DailyReminder.plan(now: morning, loggedToday: false, startMessage: 0, hour: 22, minute: 45).first.$1, DateTime(2026, 9, 24, 22, 45));
+      expect(DailyReminder.plan(now: morning, loggedToday: true, startMessage: 0, hour: 22, minute: 45).first.$1, DateTime(2026, 9, 25, 22, 45));
+    });
+
+    test('default stays 8:30 pm; formatting', () {
+      expect(DailyReminder.defaultTime, const TimeOfDay(hour: 20, minute: 30));
+      expect(DailyReminder.formatTime(const TimeOfDay(hour: 20, minute: 30)), '8:30 pm');
+      expect(DailyReminder.formatTime(const TimeOfDay(hour: 0, minute: 5)), '12:05 am');
+      expect(DailyReminder.formatTime(const TimeOfDay(hour: 12, minute: 0)), '12:00 pm');
+    });
   });
 }

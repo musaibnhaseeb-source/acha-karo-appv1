@@ -7,6 +7,7 @@ import 'thank_you_animation.dart';
 import 'daily_milestone_animation.dart';
 import 'tier_up_animation.dart';
 import 'first_deed.dart';
+import 'approval_notify_ask.dart';
 import '../utils/daily_reminder.dart';
 import '../data/guddi_content.dart';
 
@@ -48,6 +49,10 @@ void openSubmitDeedFlow(BuildContext context, String type, {String? campaignId, 
     if (result.leveledUpTier != null && context.mounted) {
       await _showOverlay(context, (onDone) => TierUpAnimation(tier: result.leveledUpTier!, onDone: onDone));
     }
+    // Went to a moderator? Offer "get told when it's approved" (once per device, only if
+    // notifications aren't already allowed). If that was shown, the reminder ask waits for a later
+    // deed so nobody gets two permission dialogs back to back.
+    if (result.flagged && context.mounted && await maybeAskApprovalNotifications(context)) return;
     // In-context ask for the daily reminder, right after a deed — only ever once per device.
     if (context.mounted) await DailyReminder.maybeAsk(context, loggedToday: true);
   });
