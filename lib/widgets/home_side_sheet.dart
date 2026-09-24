@@ -1,15 +1,11 @@
-import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../theme/app_theme.dart';
 import '../state/app_state.dart';
-import '../state/demo_app_state.dart';
-import '../widgets/animated_wallpaper.dart';
 import '../screens/notifications_screen.dart';
 import '../screens/history_screen.dart';
 import '../screens/contact_screen.dart';
 import '../screens/settings_screen.dart';
-import '../screens/friends_screen.dart';
 
 // Pilot scope — Friends/Groups deliberately hidden (parked as MVP2, per the current direction,
 // not deleted — all the underlying code still exists, just not surfaced as an entry point here).
@@ -81,31 +77,8 @@ class HomeSideSheet extends StatelessWidget {
                       Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SettingsScreen()));
                     },
                   ),
-                  // Simulator entry removed for APK readiness — a testing tool with fake-data
-                  // controls (advance day, fake flagged deeds) has no place in a real build
-                  // going to real testers. SimulatorScreen's code untouched, just unreachable.
-
-                  // Debug-only preview of the (still-hidden-from-real-users) Friends screen,
-                  // backed entirely by DemoAppState's in-memory fake data — zero Supabase calls,
-                  // does not un-hide Friends for real users. kDebugMode is a compile-time
-                  // constant, so this whole block (including the imports it alone would need)
-                  // is dead-code-eliminated from release builds, not just hidden at runtime.
-                  if (kDebugMode) ...[
-                    const Divider(color: Color(0x1FF6F5EC), height: 24),
-                    _SheetItem(
-                      icon: '🧪',
-                      label: 'Friends (Demo)',
-                      onTap: () {
-                        Navigator.of(context).pop();
-                        Navigator.of(context).push(MaterialPageRoute(
-                          builder: (_) => ChangeNotifierProvider<AppState>(
-                            create: (_) => DemoAppState(),
-                            child: const FriendsScreen(initialTab: FriendsSubTab.approve),
-                          ),
-                        ));
-                      },
-                    ),
-                  ],
+                  // Simulator and the Friends demo preview live in lib/dev_prototypes/ now
+                  // (not shipped). Friends itself stays parked, with no menu entry.
                 ],
               ),
             ),

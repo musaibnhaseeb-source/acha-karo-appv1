@@ -8,17 +8,16 @@ import 'state/app_state.dart';
 import 'screens/login_screen.dart';
 import 'screens/otp_verify_screen.dart';
 import 'screens/profile_setup_screen.dart';
-import 'screens/home_screen.dart';
 import 'screens/main_tab_screen.dart';
 import 'screens/welcome_animation_screen.dart';
 import 'widgets/animated_wallpaper.dart';
 import 'utils/notifications.dart';
+import 'utils/daily_reminder.dart';
 import 'widgets/update_available_dialog.dart';
 import 'supabase_config.dart';
 
-// This connects the app to Supabase — but only the CONNECTION. Nothing in AppState reads or
-// writes to it yet; that's the next, much bigger step (designing tables, then migrating each
-// piece of app data). For now this just proves the app can reach your project at all.
+// App entry point — connects to Supabase (all real data lives there, read/written via AppState),
+// then shows RootScreen, which routes between login, profile setup and the main app.
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Supabase.initialize(url: supabaseUrl, publishableKey: supabasePublishableKey);
@@ -108,12 +107,10 @@ class _RootScreenState extends State<RootScreen> with WidgetsBindingObserver {
     // Doesn't depend on auth state (campaigns/app_config are publicly readable) — loads
     // regardless of whether this ends up being a login or a returning-session skip.
     context.read<AppState>().loadRemoteConfig();
-    // New — real system notifications, initialized once at app start. Permission request
-    // happens here too (same category as camera/location, just no single natural on-demand
-    // moment to tie it to) — requestNotificationPermission() itself no-ops harmlessly if
-    // already granted or denied, safe to call every launch.
+    context.read<AppState>().loadTextScale(); // device-local A−/A/A+ choice
+    // System notifications are set up here but NEVER prompt at start — the permission is only
+    // asked in context (after the onboarding tour or a deed; see DailyReminder.maybeAsk).
     initNotifications();
-    requestNotificationPermission();
     _checkExistingSession();
 
     // Real gap fixed here: there was no logout anywhere in the app at all. Listening centrally
@@ -122,6 +119,7 @@ class _RootScreenState extends State<RootScreen> with WidgetsBindingObserver {
     // to Login and pops back out of wherever the person was, not just wherever the button lives.
     _authSub = Supabase.instance.client.auth.onAuthStateChange.listen((data) {
       if (data.event == AuthChangeEvent.signedOut && mounted) {
+        DailyReminder.cancelAll(); // no "Guddi is waiting" nudges for a signed-out phone
         context.read<AppState>().resetLocalState();
         Navigator.of(context).popUntil((route) => route.isFirst);
         setState(() {
@@ -161,7 +159,13 @@ class _RootScreenState extends State<RootScreen> with WidgetsBindingObserver {
       // needs to actually run here too, not just tryLoadExistingProfile(), or a disabled
       // campaign would keep showing after resuming from background just like it did before.
       final appStateObj = context.read<AppState>();
-      appStateObj.tryLoadExistingProfile();
+      // Every app open also rebuilds the daily-reminder schedule (which resets its back-off).
+      appStateObj.tryLoadExistingProfile().then(
+        (found) {
+          if (found) DailyReminder.reschedule(loggedToday: appStateObj.loggedDeedToday);
+        },
+        onError: (_) {}, // offline resume — keep what's on screen
+      );
       appStateObj.loadRemoteConfig();
     }
   }
@@ -182,6 +186,7 @@ class _RootScreenState extends State<RootScreen> with WidgetsBindingObserver {
     if (found) {
       context.read<AppState>().checkForUpdate();
       context.read<AppState>().loadEquippedSkin();
+      DailyReminder.reschedule(loggedToday: context.read<AppState>().loggedDeedToday);
     }
   }
 
@@ -252,6 +257,7 @@ class _RootScreenState extends State<RootScreen> with WidgetsBindingObserver {
             if (found) {
               context.read<AppState>().checkForUpdate();
               context.read<AppState>().loadEquippedSkin();
+              DailyReminder.reschedule(loggedToday: context.read<AppState>().loggedDeedToday);
             }
           },
         );
@@ -281,6 +287,8 @@ class _RootScreenState extends State<RootScreen> with WidgetsBindingObserver {
               );
               return; // Stops here deliberately — see comment above.
             }
+            // Brand-new account — Home shows the full 4-step Guddi tour, not the returning version.
+            appState.justCompletedSetup = true;
             if (mounted) setState(() => screen = RootScreenState.welcome);
           },
         );

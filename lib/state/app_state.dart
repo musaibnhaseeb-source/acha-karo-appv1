@@ -2,12 +2,14 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart' show Color;
 import 'dart:io';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:geolocator/geolocator.dart';
 import '../data/deed_catalog.dart';
 import '../data/badges.dart';
 import '../data/tiers.dart';
 import '../utils/notifications.dart';
 import '../data/remote_config.dart';
+import '../utils/app_version.dart';
 
 const Duration cooldownDuration = Duration(hours: 1); // same 1hr cooldown as the original
 
@@ -74,10 +76,8 @@ class SubmitResult {
   const SubmitResult({required this.flagged, required this.leveledUpTier, required this.newMilestones, this.blockedByCooldown = false});
 }
 
-// Ported from the notifications system in the original — ready infrastructure, but nothing in
-// this Flutter port generates notifications yet (moderation and feedback flows aren't built),
-// so this list will stay empty in practice until those exist. Built now so the screen and model
-// are ready rather than blocking on those other features first.
+// In-app notifications, loaded from the real notifications table (e.g. deed approved/rejected by
+// a moderator in the admin dashboard, feedback responses).
 class AppNotification {
   final String id;
   final String type; // 'feedback' | 'taskActioned' — matches the original's two types
@@ -101,12 +101,13 @@ class UserProfile {
   String? dob; // private — never shown to other users
   String? phone;
   String? email; // only collected in Edit Profile, not at signup — matches the original exactly
+  // Empty defaults — the real values always come from the profiles row (or Profile Setup).
   UserProfile({
-    this.name = 'Amina Rashid',
+    this.name = '',
     this.points = 0,
     this.streak = 0,
     this.lastLogDay = 0,
-    this.city = 'Islamabad',
+    this.city = '',
     List<String>? badges,
     this.avatarFile,
     this.joinDay = 1,
@@ -120,9 +121,8 @@ class UserProfile {
 // Ported from state.feedback in the original — upgraded from a bare string list to a real model
 // with stars/response, since the Contact screen needs those fields (the badge check in
 // badges.dart only ever used .length, so this doesn't affect that).
-// Ported from the Friends system in the original (state.friends/favoriteFriends/
-// pendingFriendRequests/assignedByMe/assignedToMe). Seeded with mock data (same idea as
-// OTHER_USERS for Leaderboard) so the UI is fully testable before a real backend exists.
+// Friends system models (friends / pending requests / assigned deeds) — loaded from the real
+// friendships and assigned_deeds tables. The Friends UI itself is parked (no entry point).
 class FriendEntry {
   final String id; // was missing entirely — made it impossible to properly assign a deed to a
   // specific friend, since there was no way to reference WHICH friend beyond their display name
@@ -161,23 +161,6 @@ class FeedbackEntry {
   FeedbackEntry({this.id, required this.stars, required this.text, required this.day, this.responded = false, this.response});
 }
 
-class OtherUser {
-  final String name;
-  final String city;
-  final int points;
-  final int badgeCount; // was hardcoded to 0 for every rival — that's why they all showed the
-  // same base tier regardless of points. Not a code bug; just unrealistic mock data. Picked
-  // plausible counts here so tiers actually vary and roughly track points, for testing.
-  const OtherUser({required this.name, required this.city, required this.points, this.badgeCount = 0});
-}
-
-const List<OtherUser> otherUsers = [
-  OtherUser(name: 'Bilal K.', city: 'Lahore', points: 940, badgeCount: 22),
-  OtherUser(name: 'Sana R.', city: 'Karachi', points: 850, badgeCount: 15),
-  OtherUser(name: 'Usman T.', city: 'Lahore', points: 760, badgeCount: 9),
-  OtherUser(name: 'Hira M.', city: 'Faisalabad', points: 705, badgeCount: 4),
-];
-
 // Ported from the original's 4 .wp-swatch presets exactly (same hex values). The original's
 // 5th option ("📷 Add your own wallpaper") isn't included — a custom photo background is a
 // bigger feature (would need to actually render a photo behind everything, not just swap a
@@ -202,6 +185,24 @@ class AppState extends ChangeNotifier {
   // genuinely private, not just something the app chooses not to display elsewhere.
   String? membershipNumber;
   List<DeedLogEntry> deedsLog = [];
+  // First-deed onboarding — true only once this account's real deed history has actually loaded
+  // (or a brand-new profile was just created, so zero deeds is certain). Until then the app
+  // genuinely doesn't know whether someone has logged a deed, so the Guddi tour/bubble stay
+  // hidden rather than guessing from an empty, not-yet-loaded list (same trap as the rank badges).
+  bool deedHistoryLoaded = false;
+  // Set right after Profile Setup succeeds, so Home shows the full 4-step tour instead of the
+  // shorter "welcome back" version. Session-only.
+  bool justCompletedSetup = false;
+  // Any deed at all (approved, pending or rejected) counts — trying is the goal.
+  bool get needsFirstDeed => deedHistoryLoaded && deedsLog.isEmpty;
+  // For the daily reminder: skip today's nudge once any deed has been logged today.
+  bool get loggedDeedToday {
+    final now = DateTime.now();
+    return deedsLog.any((d) {
+      final c = d.createdAt.toLocal();
+      return c.year == now.year && c.month == now.month && c.day == now.day;
+    });
+  }
   List<ModerationQueueItem> moderationQueue = [];
   Map<String, DateTime> lastLoggedAt = {};
   bool everRankedFirst = false;
@@ -243,12 +244,8 @@ class AppState extends ChangeNotifier {
   // replaced it, needing no persisted state at all).
   List<AppNotification> notifications = [];
 
-  // Settings — ported from the original's known settings sheet logic (text scale, sound,
-  // wallpaper color swatches). "Add to Home Screen" from the original doesn't apply here — that
-  // was a PWA-specific concept; a native Android app is already "installed" once you have the
-  // APK, there's no separate home-screen-add step to offer.
+  // Settings — text size (saved on this device) and wallpaper swatch (saved to the profile).
   String textScale = 'default'; // 'down' | 'default' | 'up'
-  bool soundEnabled = true; // stored preference — no actual sound effects exist to toggle yet
   int wallpaperSwatchIndex = 0; // matches wallpaperSwatches below
   // Real, final direction — global equip, confirmed after a genuine policy discussion: since
   // campaigns are time-limited, a skin permanently locked to one specific, possibly-expired
@@ -261,10 +258,9 @@ class AppState extends ChangeNotifier {
   String? equippedSkinIcon;
   Set<String> completedCampaignIds = {}; // new — which campaigns this user has fully claimed the Hall of Fame for, drives the tick mark on Home
 
-  // See lib/data/remote_config.dart for the full explanation — this is the single source every
-  // screen reads campaign/YouTube-link content from. Populated with local defaults for now;
-  // once Supabase exists, replace this line with a fetch at app startup and nothing else in the
-  // app needs to change.
+  // Single source every screen reads campaign / Town Voice content from. Starts as the neutral
+  // fallback (nothing shown) and is replaced by the real campaigns/app_config rows via
+  // loadRemoteConfig() at startup, on resume and on pull-to-refresh.
   RemoteConfig remoteConfig = defaultRemoteConfig();
 
   // Real load now — campaigns/app_config are both publicly readable (see the schema's RLS:
@@ -280,6 +276,11 @@ class AppState extends ChangeNotifier {
 
       final updateRow = await Supabase.instance.client.from('app_updates').select().eq('active', true).order('created_at', ascending: false).limit(1).maybeSingle();
       if (updateRow == null) return;
+
+      // Already running the build this row announces (e.g. installed it straight from the
+      // website) — nothing to update to, so never prompt for it.
+      final rowLabel = (updateRow['version_label'] as String? ?? '').trim().toLowerCase();
+      if (rowLabel == kAppVersionLabel.toLowerCase()) return;
 
       final profileRow = await Supabase.instance.client.from('profiles').select('joined_at, last_acked_update_id').eq('id', uid).maybeSingle();
       if (profileRow == null) return;
@@ -365,8 +366,10 @@ class AppState extends ChangeNotifier {
     }
   }
 
-  // Real write now — was purely a local toggle before, useful for proving the pattern worked,
-  // but didn't actually touch the database. Local state updates immediately either way.
+  // DEV-ONLY — used solely by lib/dev_prototypes/simulator_screen.dart. No shipped screen calls
+  // it, so it's tree-shaken out of release builds. Do not call from app code: it's a client-side
+  // write to campaigns.active (RLS restricts it to moderator/owner, but campaigns are managed
+  // from the admin dashboard).
   Future<void> toggleDemoCampaignActive(String campaignId) async {
     Campaign? target;
     for (final c in remoteConfig.campaigns) {
@@ -407,21 +410,29 @@ class AppState extends ChangeNotifier {
         _ => 1.0,
       };
 
+  static const _textScaleKey = 'ak_text_scale';
+
+  // Saved on this device only (shared_preferences), so the A−/A/A+ choice survives a restart.
   void setTextScale(String v) {
     textScale = v;
     notifyListeners();
+    SharedPreferences.getInstance().then((p) => p.setString(_textScaleKey, v), onError: (_) => false);
   }
 
-  void toggleSound() {
-    soundEnabled = !soundEnabled;
-    notifyListeners();
+  Future<void> loadTextScale() async {
+    try {
+      final saved = (await SharedPreferences.getInstance()).getString(_textScaleKey);
+      if (saved != null && saved != textScale && const ['down', 'default', 'up'].contains(saved)) {
+        textScale = saved;
+        notifyListeners();
+      }
+    } catch (_) {
+      // Keeps the default size if local storage isn't available.
+    }
   }
 
-  // Real bug fixed here: this only ever updated local memory, despite wallpaper_swatch_index
-  // already existing as a real column on profiles — the database had the right place for this
-  // the whole time, the app just never actually wrote to it. Confirmed the same gap exists for
-  // soundEnabled too (same unused-column pattern) — not touched here since it wasn't the
-  // specific report, but worth knowing it likely has the identical "resets on restart" issue.
+  // Saved to the real profiles.wallpaper_swatch_index column (and read back on load), so the
+  // choice survives restarts and follows the account.
   Future<void> setWallpaperSwatch(int index) async {
     wallpaperSwatchIndex = index;
     notifyListeners();
@@ -626,12 +637,21 @@ class AppState extends ChangeNotifier {
     }
   }
 
-  // Real bug fixed here: Leaderboard and rank-dependent badges (Top 10, Top 3) were comparing
-  // against otherUsers — a hardcoded mock rival dataset — despite the real database being
-  // fully readable for this (profiles is public-select, no new RLS needed). Real data now,
-  // loaded fresh whenever the leaderboard is opened.
+  // The only source of rank data in the app: real public profiles (via the get_public_profiles
+  // RPC — safe columns only) plus real badge counts, loaded at sign-in and whenever the
+  // leaderboard is opened. myRank, the "ranked #N" labels and the Top 10/3/1 badges all use it.
   List<RealLeaderboardEntry> realLeaderboard = [];
   List<RealLeaderboardEntry> weeklyLeaderboard = [];
+  // Real bug fixed here: rank-based badges (Top 10/Top 3/Ranked First) were being granted on
+  // every cold start — _applyBadgeUpdate() runs before loadLeaderboard() has finished, and with
+  // realLeaderboard still empty, myRank always comes out as #1. Only set once a load has
+  // genuinely succeeded; badges.dart and _applyBadgeUpdate() check rankDataReady before trusting
+  // any rank at all, so a failed (offline) load or an empty result can never grant these.
+  bool leaderboardLoaded = false;
+  bool get rankDataReady {
+    final uid = Supabase.instance.client.auth.currentUser?.id;
+    return leaderboardLoaded && realLeaderboard.any((e) => e.id != uid);
+  }
 
   Future<void> loadLeaderboard() async {
     try {
@@ -649,6 +669,7 @@ class AppState extends ChangeNotifier {
             points: r['points'] as int? ?? 0,
             badgeCount: badgeCounts[r['id']] ?? 0,
           )).toList();
+      leaderboardLoaded = true;
 
       // Real weekly data now — was the mock-duplicate-of-All-Time placeholder before. Reuses
       // the same RealLeaderboardEntry model; badgeCount doesn't have a clean per-week meaning,
@@ -757,14 +778,9 @@ class AppState extends ChangeNotifier {
 
   bool get hasUnreadNotifications => notifications.any((n) => !n.read);
 
-  // Broader "something needs your attention" signal for the burger menu — was only checking
-  // unread notifications before; now also covers pending friend requests and incomplete
-  // assigned-to-you tasks, so the dot actually reflects everything living inside the sheet.
-  // Real bug fixed here: this included pendingFriendRequests/assignedToMe, but Friends is hidden
-  // for the pilot — pendingFriendRequests still has mock seed data ('Bilal K.') that can never
-  // be cleared since there's no reachable UI to resolve it anymore. That's exactly why the red
-  // dot stayed lit permanently regardless of clearing real notifications. Scoped down to just
-  // what's actually reachable right now; easy to restore both checks once Friends comes back.
+  // "Something needs your attention" dot on the burger menu. Only unread notifications for now —
+  // friend requests / assigned deeds live in the parked Friends UI, which has no entry point, so
+  // counting them would light a dot the person has no way to clear.
   bool get hasSideSheetActivity => hasUnreadNotifications;
 
   // Now writes back to Supabase — was purely local before, meaning "read" status reset every
@@ -850,7 +866,8 @@ class AppState extends ChangeNotifier {
 
   Duration _clampToZero(Duration d) => d.isNegative ? Duration.zero : d;
 
-  // TEMPORARY testing helper — simulates simDay advancing (used by the Simulator's "Next Day" /
+  // DEV-ONLY (dev_prototypes/simulator_screen.dart; no shipped callers, tree-shaken from release).
+  // Testing helper — simulates simDay advancing (used by the Simulator's "Next Day" /
   // "Next Week" buttons). Cooldowns are real-wall-clock-based (cooldownRemaining above), which
   // has no relationship to simDay at all on its own — advancing the simulated day wouldn't make
   // any cooldown wear off without this explicitly clearing lastLoggedAt too.
@@ -870,10 +887,7 @@ class AppState extends ChangeNotifier {
     return deedsLog.where((d) => d.type == type && d.createdAt.year == now.year && d.createdAt.month == now.month && d.createdAt.day == now.day).length;
   }
 
-  // Real bug fixed here: this compared against otherUsers (mock rival accounts), same root
-  // cause already fixed for Leaderboard. Now uses the same real data source (realLeaderboard)
-  // as Leaderboard/myRank — one real source of truth for "who's currently ahead" instead of
-  // three separate mock-dependent versions across the app.
+  // Uses the same real data source (realLeaderboard) as Leaderboard/myRank.
   //
   // Still a real, honest limitation worth knowing: this is lifetime points, not a genuine
   // Mon–Sun weekly window (the actual agreed design). deedsLog does have real timestamps now
@@ -1014,10 +1028,8 @@ class AppState extends ChangeNotifier {
       final evidence = details.entries.where((e) => e.value.isNotEmpty).map((e) => '${e.key}: ${e.value}').join(' · ');
       final reasonText = reasons.join(' ');
 
-      // Real writes now — a deeds row (status pending) and a linked moderation_queue row.
-      // Photo upload to Storage isn't wired yet (photo_url stays null) — that's a separate,
-      // genuinely distinct piece of work (needs the Storage bucket + upload API), not silently
-      // skipped, just not part of this pass. Wrapped in try/catch so a network hiccup doesn't
+      // Real writes — a deeds row (status pending, photo_url = the uploaded Storage path above)
+      // and a linked moderation_queue row. Wrapped in try/catch so a network hiccup doesn't
       // block the person from completing what they were doing — local state still updates
       // either way; this is a known gap (no retry/offline queue yet) worth improving later.
       String? deedId;
@@ -1074,8 +1086,8 @@ class AppState extends ChangeNotifier {
           'points': awardedPoints,
           'status': 'approved',
           'photo_url': photoPath,
-          'gps_lat': position?.latitude,
-          'gps_lng': position?.longitude,
+          'gps_lat': position.latitude, // non-null here: a GPS failure always takes the flagged path above
+          'gps_lng': position.longitude,
           'campaign_id': campaignId,
         }).select().single();
         deedId = inserted['id'] as String?;
@@ -1109,14 +1121,14 @@ class AppState extends ChangeNotifier {
   // from updateBadges()/checkTierLevelUp() in the original). Only reports a level-up on genuine
   // growth — never on a downgrade.
   TierDef? _applyBadgeUpdate() {
-    if (computeRank(this, otherUsers) == 1) everRankedFirst = true;
+    if (rankDataReady && computeRank(this) == 1) everRankedFirst = true;
     final oldBadges = user.badges.toSet();
     // Real fix here, reverted: freeze/unfreeze is already handled entirely at the database
     // level (app_config.badges_frozen + an RLS check on user_badges' insert policy) — the app
     // was never meant to know this exists at all, it just tries to write and the database
     // silently allows or refuses depending on the flag. No client-side filtering needed or
     // wanted here.
-    user.badges = badgeDefs.where((b) => b.check(this, otherUsers)).map((b) => b.id).toList();
+    user.badges = badgeDefs.where((b) => b.check(this)).map((b) => b.id).toList();
     final newlyUnlocked = user.badges.where((id) => !oldBadges.contains(id)).toList();
     if (newlyUnlocked.isNotEmpty) _writeNewBadges(newlyUnlocked);
 
@@ -1140,6 +1152,9 @@ class AppState extends ChangeNotifier {
     Supabase.instance.client.from('user_badges').upsert(rows).then((_) {}, onError: (_) {});
   }
 
+  // DEV-ONLY from here through rejectQueueItem (except the city breakdown): used only by
+  // dev_prototypes/simulator_screen.dart, no shipped callers, tree-shaken from release builds.
+  // Real moderation happens in the admin dashboard.
   // Simulator-only methods — for the test Simulator screen, since real moderation is paused
   // right now. Lets that specific flow (approve/reject a flagged item) be tested independently
   // of the main submission path. Simplification worth knowing: approving adds a fresh approved
@@ -1359,21 +1374,19 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  // First real Supabase reads/writes in this app — everything else (points, deeds, badges,
-  // friends...) still lives only in local memory. This is deliberately just the auth-adjacent
-  // slice: does a profile already exist for this signed-in user, and creating one at signup.
+  // Profile / session loading. tryLoadExistingProfile() returns true if an existing profile was
+  // found and loaded (returning user — skip Setup), false if not (new user — go to Setup). The
+  // avatar photo is local-only by design and never round-tripped.
 
-  // Returns true if an existing profile was found and loaded into local state (returning user —
-  // skip Setup, go straight to Home). Returns false if no profile exists yet (new user — go to
-  // Setup as before). Photo/gender/dob aren't round-tripped from Supabase yet (avatar is
-  // explicitly local-only forever; gender/dob will come once the rest of profile sync is built).
-  // New — needed the moment sign-out became real. Without this, switching accounts would
+  // Needed since sign-out became real. Without this, switching accounts would
   // briefly show the previous account's points/deeds/friends/etc. before fresh data loads,
   // since none of this was ever being cleared on its own.
   void resetLocalState() {
     user = UserProfile();
     membershipNumber = null;
     deedsLog = [];
+    deedHistoryLoaded = false;
+    justCompletedSetup = false;
     moderationQueue = [];
     lastLoggedAt = {};
     feedback = [];
@@ -1441,6 +1454,7 @@ class AppState extends ChangeNotifier {
           campaignId: d['campaign_id'] as String?,
         );
       }).toList();
+      deedHistoryLoaded = true;
 
       // Reconstruct cooldowns from the most recent deed per type, so a real hour-long cooldown
       // persists across app restarts instead of resetting the moment the app reopens.
@@ -1575,6 +1589,7 @@ class AppState extends ChangeNotifier {
     final uid = Supabase.instance.client.auth.currentUser?.id;
     final email = Supabase.instance.client.auth.currentUser?.email;
     if (uid == null) return 'You need to be signed in to do this.';
+    if (user.city.trim().isEmpty) return 'Please pick your city to continue.'; // never write an empty city
     try {
       await Supabase.instance.client.from('profiles').insert({
         'id': uid,
@@ -1585,6 +1600,8 @@ class AppState extends ChangeNotifier {
         'gender': user.gender,
         'dob': user.dob,
       });
+      // Brand-new profile — zero deeds is certain, not a guess from an unloaded list.
+      deedHistoryLoaded = true;
       return null;
     } catch (e) {
       return 'Could not create your profile: ${e.toString()}';

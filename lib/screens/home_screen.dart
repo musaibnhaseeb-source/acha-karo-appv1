@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../theme/app_theme.dart';
 import '../state/app_state.dart';
 import '../data/deed_catalog.dart';
@@ -14,6 +15,10 @@ import 'campaign_detail_screen.dart';
 import '../widgets/campaign_icon.dart';
 import '../widgets/big_tile.dart';
 import '../utils/youtube.dart';
+import '../utils/onboarding_store.dart';
+import '../utils/daily_reminder.dart';
+import '../widgets/guddi_tour.dart';
+import '../widgets/first_deed.dart';
 
 String _formatRemaining(Duration d) {
   final mins = (d.inSeconds / 60).ceil();
@@ -36,6 +41,90 @@ class _HomeScreenState extends State<HomeScreen> {
   String? openCategoryKey;
   final _scaffoldKey = GlobalKey<ScaffoldState>();
 
+  // First-deed Guddi onboarding. Spotlight targets for the tour, plus session-only guards —
+  // whether the tour has been considered yet this session, and whether it's on screen now.
+  final _deedSectionKey = GlobalKey();
+  final _leaderboardKey = GlobalKey();
+  bool _tourConsidered = false;
+  bool _tourRunning = false;
+
+  // Deeds are something you DO — new copy never says log / write / tell.
+  static const _stepLogDeedEn = 'Did something kind today? Tap a circle to start.';
+  static const _stepLogDeedUr = 'آج کوئی اچھا کام کریں، یہاں سے شروع کریں۔';
+  static const _stepFirstDeedEn = 'Do your first good deed now. It takes 30 seconds!';
+  static const _stepFirstDeedUr = 'اپنا پہلا اچھا کام ابھی کریں، صرف 30 سیکنڈ میں!';
+
+  List<GuddiTourStep> _fullTour() => [
+        const GuddiTourStep(
+          image: 'assets/images/guddi/guddi_wink.png',
+          en: "Hi! I'm Guddi. Every good deed you do matters to me.",
+          ur: 'سلام! میں گڈی ہوں۔ آپ کا ہر اچھا کام میرے لیے اہم ہے۔',
+        ),
+        GuddiTourStep(target: _deedSectionKey, image: 'assets/images/guddi/guddi_point_phone.png', en: _stepLogDeedEn, ur: _stepLogDeedUr),
+        GuddiTourStep(
+          target: _leaderboardKey,
+          image: 'assets/images/guddi/guddi_proud.png',
+          en: 'Deeds earn points. Climb the leaderboard!',
+          ur: 'ہر اچھے کام پر پوائنٹس۔ لیڈر بورڈ پر آگے بڑھیں!',
+        ),
+        const GuddiTourStep(image: 'assets/images/guddi/guddi_show_phone.png', en: _stepFirstDeedEn, ur: _stepFirstDeedUr),
+      ];
+
+  // Returning users who have never logged a deed — just the two steps that get them there.
+  List<GuddiTourStep> _returningTour() => [
+        GuddiTourStep(
+          target: _deedSectionKey,
+          image: 'assets/images/guddi/guddi_point_phone.png',
+          leadEn: 'Welcome back! Your Guddi is still waiting for her first deed.',
+          leadUr: 'خوش آمدید! آپ کی گڈی اب بھی آپ کے پہلے اچھے کام کا انتظار کر رہی ہے۔',
+          en: _stepLogDeedEn,
+          ur: _stepLogDeedUr,
+        ),
+        const GuddiTourStep(image: 'assets/images/guddi/guddi_show_phone.png', en: _stepFirstDeedEn, ur: _stepFirstDeedUr),
+      ];
+
+  // Decides once per session. Waits (by simply returning, to be called again on the next build)
+  // until deed history has really loaded and any update popup is out of the way. Never shown
+  // once the person has any deed; never again once they've skipped/finished it on this device.
+  void _maybeStartTour() {
+    if (_tourConsidered || !mounted) return;
+    final state = context.read<AppState>();
+    if (!state.deedHistoryLoaded || state.pendingUpdate != null) return;
+    final uid = Supabase.instance.client.auth.currentUser?.id;
+    if (uid == null) return;
+    _tourConsidered = true;
+    if (!state.needsFirstDeed) return;
+    final full = state.justCompletedSetup;
+    // Held as "running" while the local flag is read, so the bubble can't flash up first.
+    setState(() => _tourRunning = true);
+    OnboardingStore.isTourDone(uid).then((done) async {
+      if (!mounted) return;
+      if (done) {
+        setState(() => _tourRunning = false);
+        return;
+      }
+      await Future.delayed(const Duration(milliseconds: 600)); // let Home settle first
+      if (!mounted) return;
+      // Deed already logged meanwhile, or another screen is on top of Home — don't overlay it.
+      // (Not marked done in the second case, so it's simply offered again next session.)
+      if (!context.read<AppState>().needsFirstDeed || !(ModalRoute.of(context)?.isCurrent ?? true)) {
+        setState(() => _tourRunning = false);
+        return;
+      }
+      final result = await showGuddiTour(context, full ? _fullTour() : _returningTour());
+      await OnboardingStore.markTourDone(uid);
+      if (!mounted) return;
+      setState(() => _tourRunning = false);
+      if (result == GuddiTourResult.cta) {
+        // Straight to their first deed; the reminder question comes after that deed instead.
+        showFirstDeedPicker(context);
+      } else {
+        // End of the tour (Later/Skip) — the in-context moment to offer the daily reminder.
+        await DailyReminder.maybeAsk(context, loggedToday: context.read<AppState>().loggedDeedToday);
+      }
+    });
+  }
+
   // New — real, direct video open for a teaser's YouTube button, same extraction logic already
   // proven elsewhere (accepts either a full link or just the raw video id).
   Future<void> _openTeaserVideo(String raw) async {
@@ -50,6 +139,8 @@ class _HomeScreenState extends State<HomeScreen> {
     final tier = getUserTier(state.user.badges.length);
     final lockedKeys = deedCatalog.keys.where((k) => state.cooldownRemaining(k) > Duration.zero).toList();
     final rank = _computeRank(state);
+    if (!_tourConsidered) WidgetsBinding.instance.addPostFrameCallback((_) => _maybeStartTour());
+    final showFirstDeedBubble = state.needsFirstDeed && _tourConsidered && !_tourRunning;
 
     return Scaffold(
       key: _scaffoldKey,
@@ -148,7 +239,22 @@ class _HomeScreenState extends State<HomeScreen> {
             ],
           ),
           const SizedBox(height: 22),
-          Text('Log a good deed', style: AppFonts.fraunces(size: 15, weight: FontWeight.w600)),
+          // Heading + rings wrapped together as one spotlight target for the Guddi tour.
+          KeyedSubtree(
+            key: _deedSectionKey,
+            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          // Wrap, not Row — on a narrow phone or the A+ text size the bubble drops under the
+          // heading instead of overflowing.
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 8,
+            runSpacing: 6,
+            children: [
+              Text('Log a good deed', style: AppFonts.fraunces(size: 15, weight: FontWeight.w600)),
+              if (showFirstDeedBubble) FirstDeedBubble(onTap: () => showFirstDeedPicker(context)),
+            ],
+          ),
           const SizedBox(height: 10),
 
           LayoutBuilder(builder: (context, constraints) {
@@ -175,6 +281,8 @@ class _HomeScreenState extends State<HomeScreen> {
               }).toList(),
             );
           }),
+            ]),
+          ),
 
           if (openCategoryKey == null && lockedKeys.isNotEmpty) ...[
             const SizedBox(height: 8),
@@ -279,16 +387,16 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ]),
               )),
-          // Restored per direction — the intent was only to hide mock data, not the feature
-          // itself, and Leaderboard was working correctly before. Note this still ranks against
-          // otherUsers (mock rival accounts) since that's the only comparison data the app has —
-          // worth knowing this isn't a real cross-user ranking yet, but restoring it as-is per
-          // the explicit instruction to bring it back the way it was.
-          BigTile(
-            icon: '👑',
-            name: 'Leaderboard',
-            description: 'You\'re ranked #$rank overall',
-            onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const LeaderboardScreen())),
+          // "Ranked #N" comes from AppState.myRank — real leaderboard data only (no mock rivals).
+          KeyedSubtree(
+            key: _leaderboardKey, // Guddi tour spotlight target
+            child: BigTile(
+              icon: '👑',
+              name: 'Leaderboard',
+              // Neutral until real leaderboard data has loaded — never a made-up "#1".
+              description: state.rankDataReady ? 'You\'re ranked #$rank overall' : 'See where you rank',
+              onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const LeaderboardScreen())),
+            ),
           ),
           const SizedBox(height: 10),
           // Profile tile removed — it's a real bottom-nav tab now, not reached via a Home tile
@@ -319,7 +427,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  int _computeRank(AppState state) => state.myRank; // real data now, see AppState.myRank
+  int _computeRank(AppState state) => state.myRank; // real leaderboard data only, see AppState.myRank
 
   String _greeting() {
     final hour = DateTime.now().hour;

@@ -111,36 +111,19 @@ class RemoteConfig {
   }
 }
 
-// Current hardcoded values, moved here as the DEFAULT rather than deleted — same numbers as
-// before, just now living in one config object instead of scattered across widget code.
-// campaigns starts empty (there's no real campaign running) — this list is exactly what a
-// Supabase `campaigns` table would populate later, sample row included as a demo.
+// Neutral fallback used until (or if) the real campaigns/app_config load succeeds: no campaigns,
+// Town Voice and the weekly leaderboard switched off, no placeholder dates or links. If the
+// database can't be reached the app shows nothing here rather than fake content.
 RemoteConfig defaultRemoteConfig() {
   return RemoteConfig(
-    weeklyLeaderboardActive: false, // matches the database default
+    weeklyLeaderboardActive: false,
     townVoice: const TownVoiceConfig(
-      streamUrl: 'https://youtube.com/live/placeholder',
-      dayLabel: 'Fri, Aug 8',
-      timeLabel: '6:00 PM',
-      durationLabel: '15 min',
-      active: false, // matches the database default — placeholder shown until explicitly activated
+      streamUrl: '',
+      dayLabel: '',
+      timeLabel: '',
+      durationLabel: '',
+      active: false,
     ),
-    campaigns: [
-      // Example only, inactive by default — this is what flipping `active: true` (a database
-      // row change, not a code change) would look like once a real campaign is running.
-      Campaign(
-        id: 'ramadan_2026',
-        title: 'Ramadan Giving Drive',
-        description: 'Double points on donation deeds all month.',
-        icon: '🌙',
-        ctaLabel: 'Learn more',
-        ctaLink: 'https://achakaro.pk/campaigns/ramadan',
-        active: false,
-        youtubeVideoId: 'dQw4w9WgXcQ', // placeholder — replace via the database, not this file
-        startDate: DateTime(2026, 3, 1),
-        endDate: DateTime(2026, 3, 30),
-        cooldownMinutesOverride: 30, // half the normal 60-minute cooldown, while this runs
-      ),
-    ],
+    campaigns: const [],
   );
 }

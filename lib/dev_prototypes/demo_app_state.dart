@@ -1,5 +1,5 @@
 import '../data/deed_catalog.dart';
-import 'app_state.dart';
+import '../state/app_state.dart';
 
 // Debug-only preview data for FriendsScreen — lets Musa/the team click through the Approve/
 // Manage/Assigned tabs and the adult/minor relationship-answer dialog with realistic-looking

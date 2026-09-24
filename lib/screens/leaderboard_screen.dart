@@ -13,9 +13,8 @@ enum LeaderboardMode { allTime, thisWeek }
 // (see weekly_leaderboard.sql) — was previously removed since the old version was an honest
 // placeholder duplicating All-Time. The toggle itself only shows when
 // remoteConfig.weeklyLeaderboardActive is true, same database-driven activation pattern as
-// campaigns/Town Voice. Real cross-user data throughout (was otherUsers, a mock rival dataset,
-// before) — profiles is fully public-select under existing RLS, so no reason it needed to stay
-// mock.
+// campaigns/Town Voice. Real cross-user data throughout, via the get_public_profiles RPC (safe
+// public columns only — no direct select on profiles).
 class LeaderboardScreen extends StatefulWidget {
   const LeaderboardScreen({super.key});
   @override

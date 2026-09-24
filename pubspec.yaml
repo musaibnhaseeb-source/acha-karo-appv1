@@ -1,7 +1,7 @@
 name: acha_karo
 description: "Acha Karo — do good, get seen."
 publish_to: 'none'
-version: 0.1.0+1
+version: 1.3.0+4                # user-facing "v1.3" — keep kAppVersionLabel in lib/utils/app_version.dart in sync
 
 environment:
   sdk: '>=3.3.0 <4.0.0'
@@ -27,6 +27,13 @@ dependencies:
                              # the platform's media gallery exists without real native code,
                              # which is what this package provides. Worth extra care on first
                              # real test, same as every other "first" package in this project.
+  shared_preferences: ^2.5.5 # local-only "onboarding tour seen" flag. Already bundled (supabase_flutter
+                             # depends on it for session storage) — this just makes it a direct dependency.
+  flutter_local_notifications: ^17.2.3  # system notifications + the local daily Guddi reminder, and the
+                                        # Android 13+ notification-permission request. Was wrongly under
+                                        # dev_dependencies, which recent Flutter strips from release builds
+                                        # (so notifications were silently dead in release APKs).
+  timezone: ^0.9.4          # scheduled-notification dates (already pulled in by flutter_local_notifications)
 
 dev_dependencies:
   flutter_test:
@@ -36,12 +43,6 @@ dev_dependencies:
   flutter_native_splash: ^2.4.1    # generates the real native launch screen (background color +
                                      # logo) from the config below — replaces Flutter's default
                                      # white screen shown before Flutter itself has loaded
-  flutter_local_notifications: ^17.2.3  # shows a real system notification (with sound) when a
-                                          # new one arrives, and handles the Android 13+
-                                          # permission request — new to this project, so worth
-                                          # extra care on first real test
-  permission_handler: ^11.3.1       # simpler, focused permission-request path specifically —
-                                      # used just for the POST_NOTIFICATIONS prompt itself
 
 flutter_launcher_icons:
   android: true
@@ -63,3 +64,4 @@ flutter:
     # different: this is a real, regular bundled image shown inside a normal screen, which
     # needed a proper assets declaration that never existed before.
     - assets/images/
+    - assets/images/guddi/     # Guddi poses for the first-deed onboarding tour

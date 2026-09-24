@@ -36,7 +36,8 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
   final phoneController = TextEditingController();
   String? gender;
   DateTime? dob;
-  String city = 'Islamabad';
+  String? city; // no pre-selection — the person must pick their own city
+  bool triedSubmit = false; // shows the inline "pick a city" message only after a Continue tap
   bool showDobInfo = false;
   // Local-device-only, same explicit privacy requirement as the original — never uploaded,
   // never sent to any backend, never stored server-side once Supabase is connected either.
@@ -61,7 +62,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
 
   bool get valid {
     final age = _calcAge(dob);
-    return nameController.text.trim().isNotEmpty && gender != null && dob != null && age != null && age >= 14;
+    return nameController.text.trim().isNotEmpty && gender != null && dob != null && age != null && age >= 14 && (city?.isNotEmpty ?? false);
   }
 
   void _confirmAbandonSetup(BuildContext context) {
@@ -127,7 +128,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
           LabeledTextField(
             label: 'Your name',
             required: true,
-            hint: 'e.g. Amina Rashid',
+            hint: 'Your full name',
             controller: nameController,
             onChanged: (_) => setState(() {}),
           ),
@@ -213,10 +214,15 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
           _label('City', required: true),
           _dropdown(
             value: city,
-            hint: 'Select',
+            hint: 'Select your city',
             items: cities.map((c) => (c, c)).toList(),
             onChanged: (v) => setState(() => city = v ?? city),
           ),
+          if (triedSubmit && city == null)
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Text('Please pick your city to continue.', style: AppFonts.inter(size: 11.5, color: const Color(0xFFE39B84))),
+            ),
           const SizedBox(height: 14),
 
           LabeledTextField(
@@ -230,16 +236,22 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
           const SizedBox(height: 14),
 
           GestureDetector(
-            onTap: valid
-                ? () => widget.onComplete(
-                      name: nameController.text.trim(),
-                      gender: gender!,
-                      dob: dob!.toIso8601String(),
-                      city: city,
-                      phone: phoneController.text.trim().isEmpty ? null : phoneController.text.trim(),
-                      avatarFile: photoFile,
-                    )
-                : null,
+            // Always tappable so a missing city can be pointed out inline; only submits when
+            // every required field (including a real city) is filled — never null/empty city.
+            onTap: () {
+              if (!valid) {
+                setState(() => triedSubmit = true);
+                return;
+              }
+              widget.onComplete(
+                name: nameController.text.trim(),
+                gender: gender!,
+                dob: dob!.toIso8601String(),
+                city: city!,
+                phone: phoneController.text.trim().isEmpty ? null : phoneController.text.trim(),
+                avatarFile: photoFile,
+              );
+            },
             child: Container(
               width: double.infinity,
               padding: const EdgeInsets.symmetric(vertical: 14),
@@ -252,7 +264,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
             ),
           ),
           const SizedBox(height: 10),
-          Center(child: Text('You can change these later from your Profile.', style: AppFonts.inter(size: 11, color: AppColors.textSoft))),
+          Center(child: Text('You can change your name, phone and photo later from your Profile.', style: AppFonts.inter(size: 11, color: AppColors.textSoft))),
         ],
       ),
     );

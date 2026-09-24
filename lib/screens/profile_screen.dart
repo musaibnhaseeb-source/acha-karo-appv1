@@ -131,7 +131,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       // (myRank) is genuinely all-time, not a weekly figure — a real, separate
                       // inconsistency found while bringing this screen back, not something new
                       // introduced. Matches Leaderboard's own "overall" labeling now.
-                      Text('#$rank overall · ${user.points} pts', style: AppFonts.plexMono(size: 11, color: AppColors.textSoft)),
+                      Text(
+                        // Rank only once real leaderboard data has loaded — never a made-up "#1".
+                        state.rankDataReady ? '#$rank overall · ${user.points} pts' : '${user.points} pts',
+                        style: AppFonts.plexMono(size: 11, color: AppColors.textSoft),
+                      ),
                       const SizedBox(height: 6),
                       Row(mainAxisSize: MainAxisSize.min, children: [
                         Text(tier.icon, style: const TextStyle(fontSize: 16)),

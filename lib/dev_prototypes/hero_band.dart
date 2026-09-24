@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
-import '../data/monuments.dart';
+import 'monuments.dart';
 
 // Ported from the SVG <pattern id="ajrakLogo"> in the original — a repeating 22x22-unit tile:
 // dark red background, a diamond outline connecting the tile's edge midpoints, and a small

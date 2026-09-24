@@ -9,7 +9,7 @@ import '../data/tiers.dart';
 import '../widgets/thank_you_animation.dart';
 import '../widgets/daily_milestone_animation.dart';
 import '../widgets/tier_up_animation.dart';
-import 'town_voice_screen.dart';
+import '../screens/town_voice_screen.dart';
 
 // Testing-only screen — lets every celebration animation and the moderator approve/reject flow
 // be triggered manually, without needing a real photo/GPS submission each time. Once the

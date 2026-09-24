@@ -1,39 +1,59 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:permission_handler/permission_handler.dart';
 
-// New — real system notifications with sound, not just the in-app list. Uses
-// flutter_local_notifications (shows the actual notification) alongside permission_handler
-// (specifically for the Android 13+ POST_NOTIFICATIONS prompt, the same category of runtime
-// permission camera/location already use). Genuinely new territory for this project — first
-// native notification package added — worth extra care on first real test.
-final FlutterLocalNotificationsPlugin _notificationsPlugin = FlutterLocalNotificationsPlugin();
+// System notifications (Android). Two uses: showing a real notification when a new in-app
+// notification row arrives (deed approved, feedback answered…), and the local daily Guddi
+// reminder (see daily_reminder.dart). Nothing here asks for permission on its own — the
+// Android 13+ prompt only ever comes from requestNotificationPermission(), which is called in
+// context (after the onboarding tour or a deed), never at app start. No-ops on web.
+final FlutterLocalNotificationsPlugin notificationsPlugin = FlutterLocalNotificationsPlugin();
 
-Future<void> initNotifications() async {
+Future<void>? _init;
+
+// Safe to call any number of times; the plugin is only initialized once. Does not prompt.
+Future<void> initNotifications() => _init ??= _doInit();
+
+Future<void> _doInit() async {
+  if (kIsWeb) return;
   try {
     const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
     const initSettings = InitializationSettings(android: androidSettings);
-    await _notificationsPlugin.initialize(initSettings);
+    await notificationsPlugin.initialize(initSettings);
   } catch (_) {
-    // Doesn't block app startup if this fails for any reason — notifications just won't show
-    // locally, same "don't let a secondary feature break the primary flow" principle used
-    // elsewhere in this app.
+    // Doesn't block the app — notifications just won't show.
   }
 }
 
-// Requested once, early — same category of runtime permission as camera/location, just prompted
-// proactively rather than tied to a specific action, since there's no single natural "moment"
-// like there is for taking a photo.
-Future<void> requestNotificationPermission() async {
+AndroidFlutterLocalNotificationsPlugin? get _android =>
+    notificationsPlugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
+
+// Shows the Android 13+ system prompt if it hasn't been answered yet (older Android: already
+// allowed). Returns whether notifications are allowed afterwards.
+Future<bool> requestNotificationPermission() async {
+  if (kIsWeb) return false;
   try {
-    await Permission.notification.request();
+    await initNotifications();
+    return await _android?.requestNotificationsPermission() ?? false;
   } catch (_) {
-    // If this fails or is denied, local notifications just silently won't show — the in-app
-    // notification list still works regardless, so nothing else breaks.
+    return false;
+  }
+}
+
+// Whether notifications are currently allowed for the app — never prompts.
+Future<bool> notificationsAllowed() async {
+  if (kIsWeb) return false;
+  try {
+    await initNotifications();
+    return await _android?.areNotificationsEnabled() ?? false;
+  } catch (_) {
+    return false;
   }
 }
 
 Future<void> showLocalNotification({required String title, required String body}) async {
+  if (kIsWeb) return;
   try {
+    await initNotifications();
     const androidDetails = AndroidNotificationDetails(
       'acha_karo_channel',
       'Acha Karo Notifications',
@@ -42,7 +62,7 @@ Future<void> showLocalNotification({required String title, required String body}
       priority: Priority.high,
     );
     const notificationDetails = NotificationDetails(android: androidDetails);
-    await _notificationsPlugin.show(
+    await notificationsPlugin.show(
       DateTime.now().millisecondsSinceEpoch ~/ 1000,
       title,
       body,

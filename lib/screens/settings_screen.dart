@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../theme/app_theme.dart';
 import '../state/app_state.dart';
 import '../widgets/animated_wallpaper.dart';
+import '../utils/daily_reminder.dart';
 
 // Ported from the original's known settings sheet — text scale, sound, wallpaper color. Nothing
 // new decided here, same logic as already established earlier in this whole project.
@@ -128,19 +129,11 @@ class SettingsScreen extends StatelessWidget {
                   _TextScaleBtn(label: 'A+', active: state.textScale == 'up', onTap: () => context.read<AppState>().setTextScale('up')),
                 ]),
               ),
-              const SizedBox(height: 24),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                decoration: BoxDecoration(color: AppColors.oliveCard, borderRadius: BorderRadius.circular(14)),
-                child: Row(children: [
-                  Expanded(child: Text('Sound effects', style: AppFonts.inter(size: 13, weight: FontWeight.w600))),
-                  Switch(
-                    value: state.soundEnabled,
-                    activeTrackColor: AppColors.gold,
-                    onChanged: (_) => context.read<AppState>().toggleSound(),
-                  ),
-                ]),
-              ),
+              // "Sound effects" toggle removed — the app has no sounds, so it controlled nothing.
+              if (DailyReminder.supported) ...[
+                const SizedBox(height: 24),
+                const _DailyReminderTile(),
+              ],
               const SizedBox(height: 24),
               Text('Wallpaper', style: AppFonts.fraunces(size: 15, weight: FontWeight.w600)),
               const SizedBox(height: 10),
@@ -195,6 +188,64 @@ class SettingsScreen extends StatelessWidget {
         ),
         ],
       ),
+    );
+  }
+}
+
+// Local on/off for the daily Guddi reminder (stored on this device only). Turning it on asks for
+// the notification permission if it hasn't been granted yet.
+class _DailyReminderTile extends StatefulWidget {
+  const _DailyReminderTile();
+  @override
+  State<_DailyReminderTile> createState() => _DailyReminderTileState();
+}
+
+class _DailyReminderTileState extends State<_DailyReminderTile> {
+  bool? _enabled; // null while loading
+  bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    DailyReminder.isEnabled().then((v) {
+      if (mounted) setState(() => _enabled = v);
+    });
+  }
+
+  Future<void> _toggle(bool on) async {
+    setState(() => _busy = true);
+    final result = await DailyReminder.setEnabled(on, loggedToday: context.read<AppState>().loggedDeedToday);
+    if (!mounted) return;
+    setState(() {
+      _enabled = result;
+      _busy = false;
+    });
+    if (on && !result) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Notifications are off for Acha Karo. Allow them in your phone settings to get reminders.'),
+      ));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      decoration: BoxDecoration(color: AppColors.oliveCard, borderRadius: BorderRadius.circular(14)),
+      child: Row(children: [
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('Daily reminder from Guddi', style: AppFonts.inter(size: 13, weight: FontWeight.w600)),
+            const SizedBox(height: 2),
+            Text('One gentle nudge at 8:30 pm', style: AppFonts.inter(size: 11, color: AppColors.textSoft)),
+          ]),
+        ),
+        Switch(
+          value: _enabled ?? false,
+          activeTrackColor: AppColors.gold,
+          onChanged: (_enabled == null || _busy) ? null : _toggle,
+        ),
+      ]),
     );
   }
 }
