@@ -99,31 +99,31 @@ class _HomeScreenState extends State<HomeScreen> {
 
   List<GuddiTourStep> _fullTour() => [
         const GuddiTourStep(
-          image: 'assets/images/guddi/guddi_wink.png',
+          image: 'assets/images/guddi/guddi_wink.webp',
           en: "Hi! I'm Guddi. Every good deed you do matters to me.",
           ur: 'سلام! میں گڈی ہوں۔ آپ کا ہر اچھا کام میرے لیے اہم ہے۔',
         ),
-        GuddiTourStep(target: _deedSectionKey, image: 'assets/images/guddi/guddi_point_phone.png', en: _stepLogDeedEn, ur: _stepLogDeedUr),
+        GuddiTourStep(target: _deedSectionKey, image: 'assets/images/guddi/guddi_point_phone.webp', en: _stepLogDeedEn, ur: _stepLogDeedUr),
         GuddiTourStep(
           target: _leaderboardKey,
-          image: 'assets/images/guddi/guddi_proud.png',
+          image: 'assets/images/guddi/guddi_proud.webp',
           en: 'Deeds earn points. Climb the leaderboard!',
           ur: 'ہر اچھے کام پر پوائنٹس۔ لیڈر بورڈ پر آگے بڑھیں!',
         ),
-        const GuddiTourStep(image: 'assets/images/guddi/guddi_show_phone.png', en: _stepFirstDeedEn, ur: _stepFirstDeedUr),
+        const GuddiTourStep(image: 'assets/images/guddi/guddi_show_phone.webp', en: _stepFirstDeedEn, ur: _stepFirstDeedUr),
       ];
 
   // Returning users who have never logged a deed — just the two steps that get them there.
   List<GuddiTourStep> _returningTour() => [
         GuddiTourStep(
           target: _deedSectionKey,
-          image: 'assets/images/guddi/guddi_point_phone.png',
+          image: 'assets/images/guddi/guddi_point_phone.webp',
           leadEn: 'Welcome back! Your Guddi is still waiting for her first deed.',
           leadUr: 'خوش آمدید! آپ کی گڈی اب بھی آپ کے پہلے اچھے کام کا انتظار کر رہی ہے۔',
           en: _stepLogDeedEn,
           ur: _stepLogDeedUr,
         ),
-        const GuddiTourStep(image: 'assets/images/guddi/guddi_show_phone.png', en: _stepFirstDeedEn, ur: _stepFirstDeedUr),
+        const GuddiTourStep(image: 'assets/images/guddi/guddi_show_phone.webp', en: _stepFirstDeedEn, ur: _stepFirstDeedUr),
       ];
 
   // Decides once per session. Waits (by simply returning, to be called again on the next build)

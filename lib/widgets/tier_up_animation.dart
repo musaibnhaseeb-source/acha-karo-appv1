@@ -55,7 +55,7 @@ class _TierUpAnimationState extends State<TierUpAnimation> with SingleTickerProv
             PopInText(delay: Duration.zero, child: Text(widget.tier.icon, style: const TextStyle(fontSize: 56))),
             const SizedBox(height: 10),
             PopInText(delay: const Duration(milliseconds: 250), child: Text(widget.tier.name, style: AppFonts.nastaliq(size: 40, color: AppColors.gold))),
-            const SizedBox(height: 8),
+            const SizedBox(height: 20), // Nastaliq glyphs dip well below their line box
             PopInText(
               delay: const Duration(milliseconds: 450),
               child: Text('Tier up!', style: AppFonts.plexMono(size: 12, weight: FontWeight.w700, color: AppColors.text)),

@@ -56,7 +56,7 @@ class _DailyMilestoneAnimationState extends State<DailyMilestoneAnimation> with 
             GuddiPopIn(pose: widget.threshold >= 5 ? GuddiPoses.strong : GuddiPoses.cheer),
             const SizedBox(height: 26),
             PopInText(delay: Duration.zero, child: Text(milestoneText(widget.threshold, widget.gender), style: AppFonts.nastaliq(size: 40, color: AppColors.gold))),
-            const SizedBox(height: 8),
+            const SizedBox(height: 20), // Nastaliq glyphs dip well below their line box
             PopInText(
               delay: const Duration(milliseconds: 300),
               child: Text(milestoneCaption(widget.threshold), style: AppFonts.plexMono(size: 11, weight: FontWeight.w700, color: AppColors.text).copyWith(decoration: TextDecoration.none)),

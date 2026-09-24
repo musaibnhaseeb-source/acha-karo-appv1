@@ -167,7 +167,30 @@ class _GuddiFigureState extends State<GuddiFigure> with SingleTickerProviderStat
   @override
   Widget build(BuildContext context) {
     final w = widget.width, h = widget.height;
-    final image = Image.asset(widget.pose, height: h - 8, fit: BoxFit.contain, gaplessPlayback: true);
+    // The rest pose is a slim full-body image and reads tiny at this size — show it larger,
+    // cropped just above the knees with a soft fade, like the waist-up poses.
+    final isRest = widget.pose == GuddiPoses.rest;
+    final Widget image = isRest
+        ? ClipRect(
+            child: SizedBox(
+              height: h - 8,
+              child: OverflowBox(
+                alignment: Alignment.topCenter,
+                maxHeight: (h - 8) * 1.45,
+                child: ShaderMask(
+                  blendMode: BlendMode.dstIn,
+                  shaderCallback: (r) => const LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [Colors.white, Colors.white, Colors.transparent],
+                    stops: [0, 0.55, 0.69],
+                  ).createShader(r),
+                  child: Image.asset(widget.pose, height: (h - 8) * 1.45, fit: BoxFit.contain, gaplessPlayback: true),
+                ),
+              ),
+            ),
+          )
+        : Image.asset(widget.pose, height: h - 8, fit: BoxFit.contain, gaplessPlayback: true);
     return SizedBox(
       width: w,
       height: h,
@@ -373,7 +396,18 @@ class GuddiPopIn extends StatelessWidget {
       duration: const Duration(milliseconds: 650),
       curve: Curves.elasticOut,
       builder: (_, v, child) => Transform.scale(scale: v, child: Opacity(opacity: ((v - 0.4) / 0.6).clamp(0.0, 1.0), child: child)),
-      child: Image.asset(pose, height: h, fit: BoxFit.contain),
+      // Most poses are cropped flat at the waist — fade the bottom edge so they don't end in a
+      // hard line over the dimmed screen.
+      child: ShaderMask(
+        blendMode: BlendMode.dstIn,
+        shaderCallback: (r) => const LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Colors.white, Colors.white, Colors.transparent],
+          stops: [0, 0.8, 1],
+        ).createShader(r),
+        child: Image.asset(pose, height: h, fit: BoxFit.contain),
+      ),
     );
   }
 }

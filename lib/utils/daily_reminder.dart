@@ -149,7 +149,7 @@ class _ReminderAskDialog extends StatelessWidget {
       backgroundColor: AppColors.bg2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
       content: Column(mainAxisSize: MainAxisSize.min, children: [
-        Image.asset('assets/images/guddi/guddi_small.png', height: 90, fit: BoxFit.contain),
+        Image.asset('assets/images/guddi/guddi_small.webp', height: 90, fit: BoxFit.contain),
         const SizedBox(height: 10),
         Text('Want a daily reminder from Guddi?', textAlign: TextAlign.center, style: AppFonts.fraunces(size: 16, weight: FontWeight.w600)),
         const SizedBox(height: 6),

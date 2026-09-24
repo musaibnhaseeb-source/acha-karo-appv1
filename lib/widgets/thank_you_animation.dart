@@ -48,7 +48,7 @@ class _ThankYouAnimationState extends State<ThankYouAnimation> with SingleTicker
             const GuddiPopIn(pose: GuddiPoses.cheer), // wink + thumbs up
             const SizedBox(height: 26),
             PopInText(delay: Duration.zero, child: Text('شکریہ', style: AppFonts.nastaliq(size: 40, color: AppColors.gold))),
-            const SizedBox(height: 8),
+            const SizedBox(height: 20), // Nastaliq glyphs dip well below their line box
             PopInText(
               delay: const Duration(milliseconds: 250),
               // Matches the daily-milestone animation's caption styling (plexMono, same weight)
@@ -59,7 +59,7 @@ class _ThankYouAnimationState extends State<ThankYouAnimation> with SingleTicker
               child: Text(
                 widget.wasFlagged
                     ? 'Sent for review — points credited shortly after a moderator checks it.'
-                    : 'Deed logged and points credited!',
+                    : 'Acha kaam done, points credited!',
                 textAlign: TextAlign.center,
                 style: AppFonts.plexMono(
                   size: 11,

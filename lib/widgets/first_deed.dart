@@ -24,7 +24,7 @@ Future<void> showFirstDeedPicker(BuildContext context) {
         top: false,
         child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           Row(children: [
-            Image.asset('assets/images/guddi/guddi_small.png', height: 56, fit: BoxFit.contain),
+            Image.asset('assets/images/guddi/guddi_small.webp', height: 56, fit: BoxFit.contain),
             const SizedBox(width: 10),
             Expanded(
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -98,7 +98,7 @@ class _FirstDeedBubbleState extends State<FirstDeedBubble> with SingleTickerProv
         AnimatedBuilder(
           animation: _bob,
           builder: (_, child) => Transform.translate(offset: Offset(0, -3 * Curves.easeInOut.transform(_bob.value)), child: child),
-          child: Image.asset('assets/images/guddi/guddi_small.png', height: 34, fit: BoxFit.contain),
+          child: Image.asset('assets/images/guddi/guddi_small.webp', height: 34, fit: BoxFit.contain),
         ),
       ]),
     );
@@ -162,7 +162,7 @@ class _FirstDeedCelebrationState extends State<FirstDeedCelebration> with Ticker
                   scale: CurvedAnimation(parent: _pop, curve: Curves.elasticOut),
                   // Scales with the screen (never cropped) so short phones keep her whole head in view.
                   child: Image.asset(
-                    'assets/images/guddi/guddi_show_phone.png',
+                    'assets/images/guddi/guddi_show_phone.webp',
                     height: (MediaQuery.of(context).size.height * 0.34).clamp(150.0, 260.0),
                     fit: BoxFit.contain,
                   ),

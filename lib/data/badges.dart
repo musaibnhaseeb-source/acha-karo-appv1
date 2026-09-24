@@ -57,13 +57,13 @@ const List<BadgeCategoryDef> badgeCategoryDefs = [
 // compile-time constants in Dart, no matter how simple their body is. `final` still means this
 // list is created exactly once and never reassigned, which is all we actually need here.
 final List<BadgeDef> badgeDefs = [
-  BadgeDef(id: 'firstStep', name: 'First Step', icon: '🌱', req: 'Log your first deed', tier: 'bronze', category: 'streak', check: (s) => s.deedsLog.where((d) => d.status == 'approved').length >= 1),
+  BadgeDef(id: 'firstStep', name: 'First Step', icon: '🌱', req: 'Do your first acha kaam', tier: 'bronze', category: 'streak', check: (s) => s.deedsLog.where((d) => d.status == 'approved').length >= 1),
   BadgeDef(id: 'streak3', name: '3-Day Streak', icon: '🔥', req: '3 consecutive days', tier: 'bronze', category: 'streak', check: (s) => s.user.streak >= 3),
   BadgeDef(id: 'streak5', name: '5-Day Streak', icon: '🔥', req: '5 consecutive days', tier: 'silver', category: 'streak', check: (s) => s.user.streak >= 5),
   BadgeDef(id: 'streak7', name: '7-Day Streak', icon: '🔥🔥', req: '7 consecutive days', tier: 'gold', category: 'streak', check: (s) => s.user.streak >= 7),
   BadgeDef(id: 'streak14', name: '14-Day Streak', icon: '⚡', req: '14 consecutive days', tier: 'platinum', category: 'streak', check: (s) => s.user.streak >= 14),
   BadgeDef(id: 'streak30', name: '30-Day Streak', icon: '🌟', req: '30 consecutive days', tier: 'rainbow', category: 'streak', check: (s) => s.user.streak >= 30),
-  BadgeDef(id: 'deeds100', name: '100 Deeds', icon: '💯', req: 'Log 100 total deeds', tier: 'gold', category: 'streak', check: (s) => s.deedsLog.where((d) => d.status == 'approved').length >= 100),
+  BadgeDef(id: 'deeds100', name: '100 Deeds', icon: '💯', req: 'Complete 100 deeds', tier: 'gold', category: 'streak', check: (s) => s.deedsLog.where((d) => d.status == 'approved').length >= 100),
   BadgeDef(id: 'litterPicker', name: 'Litter Picker', icon: '🗑️', req: '10 litter deeds', tier: 'bronze', category: 'env', check: (s) => countType(s, 'litter') >= 10),
   BadgeDef(id: 'cleanStreet', name: 'Clean Street', icon: '🧹', req: '25 litter deeds', tier: 'silver', category: 'env', check: (s) => countType(s, 'litter') >= 25),
   BadgeDef(id: 'zeroWaste', name: 'Zero Waste Hero', icon: '♻️', req: '50 litter deeds', tier: 'gold', category: 'env', check: (s) => countType(s, 'litter') >= 50),
@@ -80,7 +80,7 @@ final List<BadgeDef> badgeDefs = [
   BadgeDef(id: 'communityPainter', name: 'Community Painter', icon: '🎨', req: '3 benches painted', tier: 'silver', category: 'civic', check: (s) => countType(s, 'paintBench') >= 3),
   BadgeDef(id: 'goodNeighbor', name: 'Good Neighbor', icon: '🤝', req: '10 crossings helped', tier: 'silver', category: 'civic', check: (s) => countType(s, 'helpCrossRoad') >= 10),
   BadgeDef(id: 'schoolChampion', name: 'School Champion', icon: '🏫', req: '5 school clean-ups', tier: 'gold', category: 'civic', check: (s) => countType(s, 'cleanSchool') >= 5),
-  BadgeDef(id: 'faithfulServant', name: 'Faithful Servant', icon: '🕌', req: '3 places of worship cleaned', tier: 'gold', category: 'civic', check: (s) => countType(s, 'cleanWorship') >= 3),
+  BadgeDef(id: 'faithfulServant', name: 'Community Caretaker', icon: '🧹', req: '3 places of worship cleaned', tier: 'gold', category: 'civic', check: (s) => countType(s, 'cleanWorship') >= 3),
   BadgeDef(id: 'generousGiver', name: 'Generous Giver', icon: '🎒', req: '5 school supply donations', tier: 'bronze', category: 'social', check: (s) => countType(s, 'donateSupplies') >= 5),
   BadgeDef(id: 'mealProvider', name: 'Meal Provider', icon: '🍲', req: '10 meals shared', tier: 'silver', category: 'social', check: (s) => countType(s, 'shareMeal') >= 10),
   BadgeDef(id: 'literacyChampion', name: 'Literacy Champion', icon: '📚', req: '10 book donations', tier: 'silver', category: 'social', check: (s) => countType(s, 'donateBooks') >= 10),
@@ -94,7 +94,7 @@ final List<BadgeDef> badgeDefs = [
   BadgeDef(id: 'townVoiceWinner', name: 'Town Voice Winner', icon: '🎙️', req: 'Win Town Voice', tier: 'platinum', category: 'special', check: (s) => (s.townVoiceWins) >= 1),
   BadgeDef(id: 'advisor', name: 'Advisor', icon: '📣', req: 'Submit 3 feedbacks', tier: 'gold', category: 'special', check: (s) => s.feedback.length >= 3),
   BadgeDef(id: 'mentor', name: 'Mentor', icon: '🌟', req: 'Teach 10 skills', tier: 'platinum', category: 'special', check: (s) => countType(s, 'teachSkill') >= 10),
-  BadgeDef(id: 'allRounder', name: 'All-Rounder', icon: '🎯', req: 'Log deeds in all 5 categories', tier: 'rainbow', category: 'special', check: (s) => allCategoriesTouched(s)),
+  BadgeDef(id: 'allRounder', name: 'All-Rounder', icon: '🎯', req: 'Do deeds in all 5 categories', tier: 'rainbow', category: 'special', check: (s) => allCategoriesTouched(s)),
   // Rank badges only trust a rank once real leaderboard data has loaded (see
   // AppState.rankDataReady). Until then they just keep whatever the user already holds —
   // never newly granted from an empty/failed load, and never dropped for lack of data either.
