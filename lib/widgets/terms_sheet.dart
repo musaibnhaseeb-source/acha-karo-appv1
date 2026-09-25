@@ -14,7 +14,7 @@ class _Section {
   const _Section(this.heading, {this.paragraphs = const [], this.bullets = const []});
 }
 
-// TODO(Musa): confirm the "Last updated" date — the website copy still has it as a placeholder.
+// "Last updated" = v1.3 launch date, confirmed by the Supervisor for the final build (keep in sync with the website Terms).
 const _lastUpdated = '25 September 2026';
 const kHelpContactUrl = 'https://achakaro.vercel.app/help.html#contact';
 
