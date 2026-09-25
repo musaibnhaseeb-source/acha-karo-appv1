@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../data/tiers.dart';
 import '../screens/home_screen.dart';
 import '../screens/profile_screen.dart';
+import '../screens/main_tab_screen.dart';
 import '../data/badges.dart';
 import '../state/app_state.dart';
 import '../theme/app_theme.dart';
@@ -130,13 +131,19 @@ class _PreviewAppAppState extends State<_PreviewApp> {
           ),
           // Phone-sized frame with the real HomeScreen.
           Container(
-            width: 390, height: 844,
+            // Frame size from the URL (?w=360&h2=640) to check small screens; default 390×844.
+            width: double.tryParse(Uri.base.queryParameters['w'] ?? '') ?? 390,
+            height: double.tryParse(Uri.base.queryParameters['h2'] ?? '') ?? 844,
             margin: const EdgeInsets.all(12),
             color: AppColors.bg1,
             child: ChangeNotifierProvider<AppState>.value(
               key: ValueKey('$hour$deedToday$priorDays$away'),
               value: state,
-              child: Navigator(key: _homeNav, onGenerateRoute: (_) => MaterialPageRoute(builder: (_) => Uri.base.queryParameters['screen'] == 'profile' ? const ProfileScreen() : const HomeScreen())),
+              child: Navigator(key: _homeNav, onGenerateRoute: (_) => MaterialPageRoute(builder: (_) => switch (Uri.base.queryParameters['screen']) {
+                    'profile' => const ProfileScreen(),
+                    'tabs' => MainTabScreen(initialIndex: int.tryParse(Uri.base.queryParameters['tab'] ?? '') ?? 0),
+                    _ => const HomeScreen(),
+                  })),
             ),
           ),
         ]),

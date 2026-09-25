@@ -238,7 +238,9 @@ class _HomeScreenState extends State<HomeScreen> {
           child: SingleChildScrollView(
       physics: const AlwaysScrollableScrollPhysics(), // required for RefreshIndicator's pull
       // gesture to work even when content is shorter than the screen and wouldn't otherwise scroll
-      padding: const EdgeInsets.fromLTRB(18, 6, 18, 90),
+      // Clears the floating bottom bar: MainTabScreen extends the body under it and passes the
+      // bar's height down as bottom padding.
+      padding: EdgeInsets.fromLTRB(18, 6, 18, 24 + MediaQuery.paddingOf(context).bottom),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
