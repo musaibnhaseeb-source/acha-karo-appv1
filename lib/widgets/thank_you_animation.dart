@@ -20,6 +20,7 @@ class ThankYouAnimation extends StatefulWidget {
 class _ThankYouAnimationState extends State<ThankYouAnimation> with SingleTickerProviderStateMixin {
   late final AnimationController _confettiController;
   late final List<ConfettiPiece> _pieces;
+  final String _pose = randomFromPool(GuddiPoses.cheerPool);
 
   @override
   void initState() {
@@ -45,7 +46,7 @@ class _ThankYouAnimationState extends State<ThankYouAnimation> with SingleTicker
         ConfettiLayer(controller: _confettiController, pieces: _pieces),
         Center(
           child: Column(mainAxisSize: MainAxisSize.min, children: [
-            const GuddiPopIn(pose: GuddiPoses.cheer), // wink + thumbs up
+            GuddiPopIn(pose: _pose), // one of the cheer pool, picked when this opens
             const SizedBox(height: 26),
             PopInText(delay: Duration.zero, child: Text('شکریہ', style: AppFonts.nastaliq(size: 40, color: AppColors.gold))),
             const SizedBox(height: 20), // Nastaliq glyphs dip well below their line box

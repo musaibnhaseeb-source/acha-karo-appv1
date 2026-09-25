@@ -27,6 +27,7 @@ class DailyMilestoneAnimation extends StatefulWidget {
 class _DailyMilestoneAnimationState extends State<DailyMilestoneAnimation> with SingleTickerProviderStateMixin {
   late final AnimationController _confettiController;
   late final List<ConfettiPiece> _pieces;
+  final String _cheerPose = randomFromPool(GuddiPoses.cheerPool); // picked once when this opens
 
   @override
   void initState() {
@@ -53,7 +54,7 @@ class _DailyMilestoneAnimationState extends State<DailyMilestoneAnimation> with 
         Center(
           child: Column(mainAxisSize: MainAxisSize.min, children: [
             // 3 deeds: wink + thumbs up. 5 and 7 are the big ones: sword-hilt "getting stronger".
-            GuddiPopIn(pose: widget.threshold >= 5 ? GuddiPoses.strong : GuddiPoses.cheer),
+            GuddiPopIn(pose: widget.threshold >= 5 ? GuddiPoses.strong : _cheerPose),
             const SizedBox(height: 26),
             PopInText(delay: Duration.zero, child: Text(milestoneText(widget.threshold, widget.gender), style: AppFonts.nastaliq(size: 40, color: AppColors.gold))),
             const SizedBox(height: 20), // Nastaliq glyphs dip well below their line box

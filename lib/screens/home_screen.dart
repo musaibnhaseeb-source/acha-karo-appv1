@@ -57,6 +57,9 @@ class _HomeScreenState extends State<HomeScreen> {
   Timer? _clockTimer;
   String _clockBand = _bandFor(DateTime.now());
   bool _posesPrecached = false;
+  // Guddi "carousel": taps on her (and on the idea-card avatar) step through the current pose pool.
+  int _headerPoseTaps = 0;
+  int _ideaPoseTaps = 0;
 
   static String _bandFor(DateTime t) {
     final h = t.hour;
@@ -274,6 +277,8 @@ class _HomeScreenState extends State<HomeScreen> {
           // the right; points + tier; Mon–Sun week row with the real streak; compact idea card.
           GuddiHomeHeader(
             mood: mood,
+            poseOffset: _headerPoseTaps,
+            onCyclePose: () => setState(() => _headerPoseTaps++),
             nameBlock: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(state.user.name.split(' ').first, style: AppFonts.fraunces(size: 22, weight: FontWeight.w600)),
               if (state.membershipNumber != null) ...[
@@ -307,6 +312,8 @@ class _HomeScreenState extends State<HomeScreen> {
           // Someone with no deeds yet goes to the easy-first-deed picker instead of today's idea.
           AchaKaamIdeaCard(
             idea: idea,
+            avatarPose: pickFromPool(GuddiPoses.ideaPool, offset: _ideaPoseTaps),
+            onAvatarTap: () => setState(() => _ideaPoseTaps++),
             onDo: state.needsFirstDeed
                 ? () => showFirstDeedPicker(context)
                 : (state.isGlobalCooldownActive ? null : openTodaysIdea),

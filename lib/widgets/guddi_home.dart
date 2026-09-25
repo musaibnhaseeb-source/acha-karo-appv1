@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import '../data/guddi_content.dart';
@@ -19,17 +20,46 @@ class GuddiPoses {
   static const rest = '$_dir/guddi_rest.webp'; // eyes closed — night / "rest well"
   static const strong = '$_dir/guddi_strong.webp'; // sword hilt — tier-up, big milestones
   static const power = '$_dir/guddi_power.webp'; // sword drawn, different art style — top tier ONLY
+  // The original onboarding set, back in day-to-day rotation through the pools below.
+  static const wink = '$_dir/guddi_wink.webp'; // close-up wink + thumbs up
+  static const proud = '$_dir/guddi_proud.webp'; // sunglasses, arms crossed (slim full body)
+  static const pointPhone = '$_dir/guddi_point_phone.webp'; // pointing at the Acha Karo app
+  static const showPhone = '$_dir/guddi_show_phone.webp'; // holding the app up (slim full body)
+  // guddi_small (walking / shrug) stays in the first-deed picker, bubble and reminder ask only.
 
-  static const homePoses = [smile, chatty, curious, cheer, worried, frown, rest];
-  static const celebrationPoses = [cheer, strong, power];
+  // POSE POOLS — each moment rotates through a few poses that fit it (Musa: "different images can
+  // appear randomly"). Moments where the emotion matters (worried, rest, frown, strong, power)
+  // stay fixed.
+  static const happyPool = [smile, chatty, wink, proud, showPhone]; // Home header, everyday
+  static const cheerPool = [cheer, wink, proud]; // done today, thank-you, 3-deed milestone
+  static const ideaPool = [curious, explain, pointPhone]; // idea-card avatar
+
+  // Slim full-body poses read tiny at header size — shown larger, cropped above the knees.
+  static const tallPoses = {rest, proud, showPhone};
+
+  static const homePoses = [smile, chatty, wink, proud, showPhone, curious, explain, pointPhone, cheer, worried, frown, rest];
+  static const celebrationPoses = [cheer, wink, proud, strong, power];
 }
 
+// Picked once per app open, so Guddi's pose is random between opens but never flickers on
+// rebuilds. Tapping her steps through the pool from there.
+final int guddiSessionSeed = math.Random().nextInt(1 << 20);
+
+String pickFromPool(List<String> pool, {int offset = 0}) => pool[(guddiSessionSeed + offset) % pool.length];
+
+/// A fresh random pick — for one-off moments like a celebration overlay (chosen once when it opens).
+String randomFromPool(List<String> pool) => pool[math.Random().nextInt(pool.length)];
+
 class GuddiHomeMood {
-  final String pose;
+  final List<String> pool; // poses that fit this moment (one = fixed)
   final GuddiLine? line;
   final bool night;
   final int streak; // substituted into "{n}"
-  const GuddiHomeMood(this.pose, this.line, {required this.night, this.streak = 0});
+  const GuddiHomeMood(this.pool, this.line, {required this.night, this.streak = 0});
+
+  /// Stable for this app open; [offset] = how many times the user has tapped Guddi.
+  String poseAt(int offset) => pickFromPool(pool, offset: offset);
+  String get pose => poseAt(0);
 
   String? get roman => line?.roman.replaceAll('{n}', '$streak');
   String? get en => line?.en?.replaceAll('{n}', '$streak');
@@ -53,33 +83,36 @@ GuddiHomeMood pickGuddiHomeMood({
 }) {
   final h = now.hour;
   final night = isNightHour(h);
-  GuddiHomeMood m(String pose, GuddiLine? line) => GuddiHomeMood(pose, line, night: night, streak: streak);
+  GuddiHomeMood m(List<String> pool, GuddiLine? line) => GuddiHomeMood(pool, line, night: night, streak: streak);
 
   // History unknown yet — a friendly default, no claims about their day.
-  if (!historyLoaded) return m(GuddiPoses.smile, null);
+  if (!historyLoaded) return m(GuddiPoses.happyPool, null);
 
   if (doneToday) {
-    if (night) return m(GuddiPoses.rest, GuddiLines.doneNight);
-    if (streak >= 2) return m(GuddiPoses.cheer, GuddiLines.doneStreak);
-    return m(GuddiPoses.cheer, GuddiLines.done);
+    if (night) return m(const [GuddiPoses.rest], GuddiLines.doneNight);
+    if (streak >= 2) return m(GuddiPoses.cheerPool, GuddiLines.doneStreak);
+    return m(GuddiPoses.cheerPool, GuddiLines.done);
   }
-  if (needsFirstDeed) return m(GuddiPoses.smile, GuddiLines.firstDeed);
-  if (rejectedTodayOnly) return m(GuddiPoses.frown, GuddiLines.rejectedToday);
-  if (h < 5) return m(GuddiPoses.rest, GuddiLines.lateNight); // after midnight: no nudging
-  if (daysSinceLast != null && daysSinceLast >= 3) return m(GuddiPoses.worried, GuddiLines.comeback);
-  if (streak >= 2 && h < 21) return m(GuddiPoses.chatty, GuddiLines.streakAlive);
-  if (h < 12) return m(GuddiPoses.chatty, GuddiLines.morning);
-  if (h < 17) return m(GuddiPoses.smile, GuddiLines.day);
-  return m(GuddiPoses.smile, GuddiLines.evening); // evening, and 9 pm–midnight (night treatment)
+  if (needsFirstDeed) return m(GuddiPoses.happyPool, GuddiLines.firstDeed);
+  if (rejectedTodayOnly) return m(const [GuddiPoses.frown], GuddiLines.rejectedToday);
+  if (h < 5) return m(const [GuddiPoses.rest], GuddiLines.lateNight); // after midnight: no nudging
+  if (daysSinceLast != null && daysSinceLast >= 3) return m(const [GuddiPoses.worried], GuddiLines.comeback);
+  if (streak >= 2 && h < 21) return m(GuddiPoses.happyPool, GuddiLines.streakAlive);
+  if (h < 12) return m(GuddiPoses.happyPool, GuddiLines.morning);
+  if (h < 17) return m(GuddiPoses.happyPool, GuddiLines.day);
+  return m(GuddiPoses.happyPool, GuddiLines.evening); // evening, and 9 pm–midnight (night treatment)
 }
 
 // ---------------------------------------------------------------------------------------------
 
-/// Speech bubble (left) + Guddi (right). The bubble's tail points at her.
+/// Speech bubble (left) + Guddi (right). The bubble's tail points at her. Tap or swipe Guddi to
+/// see the next pose in the current pool (no auto-rotation).
 class GuddiHomeHeader extends StatelessWidget {
   final GuddiHomeMood mood;
   final Widget nameBlock; // name + membership number, above the bubble
-  const GuddiHomeHeader({super.key, required this.mood, required this.nameBlock});
+  final int poseOffset;
+  final VoidCallback? onCyclePose;
+  const GuddiHomeHeader({super.key, required this.mood, required this.nameBlock, this.poseOffset = 0, this.onCyclePose});
 
   @override
   Widget build(BuildContext context) {
@@ -97,7 +130,19 @@ class GuddiHomeHeader extends StatelessWidget {
         ]),
       ),
       const SizedBox(width: 6),
-      GuddiFigure(pose: mood.pose, night: mood.night),
+      if (mood.pool.length > 1 && onCyclePose != null)
+        Semantics(
+          button: true,
+          label: 'Guddi. Tap to see another pose.',
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: onCyclePose,
+            onHorizontalDragEnd: (_) => onCyclePose!(),
+            child: GuddiFigure(pose: mood.poseAt(poseOffset), night: mood.night),
+          ),
+        )
+      else
+        GuddiFigure(pose: mood.poseAt(poseOffset), night: mood.night),
     ]);
   }
 }
@@ -167,10 +212,10 @@ class _GuddiFigureState extends State<GuddiFigure> with SingleTickerProviderStat
   @override
   Widget build(BuildContext context) {
     final w = widget.width, h = widget.height;
-    // The rest pose is a slim full-body image and reads tiny at this size — show it larger,
+    // Slim full-body poses (rest, proud, show-phone) read tiny at this size — show them larger,
     // cropped just above the knees with a soft fade, like the waist-up poses.
-    final isRest = widget.pose == GuddiPoses.rest;
-    final Widget image = isRest
+    final isTall = GuddiPoses.tallPoses.contains(widget.pose);
+    final Widget image = isTall
         ? ClipRect(
             child: SizedBox(
               height: h - 8,
@@ -310,7 +355,17 @@ class WeekRowCard extends StatelessWidget {
 class AchaKaamIdeaCard extends StatelessWidget {
   final AchaKaamIdea idea;
   final VoidCallback? onDo; // null while the global cooldown is on
-  const AchaKaamIdeaCard({super.key, required this.idea, required this.onDo});
+  final String avatarPose; // from GuddiPoses.ideaPool
+  final VoidCallback? onAvatarTap; // steps to the next pose in the pool
+  const AchaKaamIdeaCard({super.key, required this.idea, required this.onDo, this.avatarPose = GuddiPoses.curious, this.onAvatarTap});
+
+  // Where each pose's face sits (and how far to zoom in), so the round avatar shows her face.
+  static const _faceAlign = {
+    GuddiPoses.curious: Alignment(0, -0.85),
+    GuddiPoses.explain: Alignment(0.3, -0.9),
+    GuddiPoses.pointPhone: Alignment(-0.35, -0.55),
+  };
+  static const _faceZoom = {GuddiPoses.explain: 1.7, GuddiPoses.pointPhone: 1.6};
 
   @override
   Widget build(BuildContext context) {
@@ -323,12 +378,28 @@ class AchaKaamIdeaCard extends StatelessWidget {
         border: Border.all(color: AppColors.gold.withOpacity(0.5)),
       ),
       child: Row(children: [
-        // Curious Guddi, head-and-shoulders crop.
-        Container(
-          width: 48, height: 48,
-          clipBehavior: Clip.antiAlias,
-          decoration: BoxDecoration(shape: BoxShape.circle, color: AppColors.gold.withOpacity(0.22)),
-          child: Image.asset(GuddiPoses.curious, fit: BoxFit.cover, alignment: const Alignment(0, -0.85)),
+        // Guddi (curious / explain / point-phone), head-and-shoulders crop; tap for another.
+        GestureDetector(
+          onTap: onAvatarTap,
+          child: Container(
+            width: 48, height: 48,
+            clipBehavior: Clip.antiAlias,
+            decoration: BoxDecoration(shape: BoxShape.circle, color: AppColors.gold.withOpacity(0.22)),
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 300),
+              child: Transform.scale(
+                key: ValueKey(avatarPose),
+                scale: _faceZoom[avatarPose] ?? 1.0,
+                alignment: _faceAlign[avatarPose] ?? const Alignment(0, -0.85),
+                child: Image.asset(
+                  avatarPose,
+                  width: 48, height: 48,
+                  fit: BoxFit.cover,
+                  alignment: _faceAlign[avatarPose] ?? const Alignment(0, -0.85),
+                ),
+              ),
+            ),
+          ),
         ),
         const SizedBox(width: 12),
         Expanded(
@@ -391,6 +462,21 @@ class GuddiPopIn extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final h = (MediaQuery.of(context).size.height * screenFraction).clamp(110.0, maxHeight);
+    // Slim full-body poses (e.g. proud) would read tiny next to the waist-up ones — show them
+    // larger and cropped above the knees, same as in the Home header.
+    final tall = GuddiPoses.tallPoses.contains(pose);
+    final Widget img = tall
+        ? ClipRect(
+            child: SizedBox(
+              height: h,
+              child: OverflowBox(
+                alignment: Alignment.topCenter,
+                maxHeight: h * 1.45,
+                child: Image.asset(pose, height: h * 1.45, fit: BoxFit.contain),
+              ),
+            ),
+          )
+        : Image.asset(pose, height: h, fit: BoxFit.contain);
     return TweenAnimationBuilder<double>(
       tween: Tween(begin: 0.4, end: 1),
       duration: const Duration(milliseconds: 650),
@@ -406,7 +492,7 @@ class GuddiPopIn extends StatelessWidget {
           colors: [Colors.white, Colors.white, Colors.transparent],
           stops: [0, 0.8, 1],
         ).createShader(r),
-        child: Image.asset(pose, height: h, fit: BoxFit.contain),
+        child: img,
       ),
     );
   }
