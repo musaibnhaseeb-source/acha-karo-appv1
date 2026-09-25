@@ -94,7 +94,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // Deeds are something you DO — new copy never says log / write / tell.
   static const _stepLogDeedEn = 'Did something kind today? Tap a circle to start.';
-  static const _stepLogDeedUr = 'آج کوئی اچھا کام کریں، یہاں سے شروع کریں۔';
+  static const _stepLogDeedUr = 'آج کوئی اچھا کام کریں، یہاں سے شروع کیجیے۔';
   static const _stepFirstDeedEn = 'Do your first good deed now. It takes 30 seconds!';
   static const _stepFirstDeedUr = 'ابھی اپنا پہلا اچھا کام کریں، صرف 30 سیکنڈ میں!';
 
