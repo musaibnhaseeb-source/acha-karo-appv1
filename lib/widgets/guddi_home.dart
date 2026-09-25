@@ -75,6 +75,74 @@ GuddiHomeMood pickGuddiHomeMood({
 
 // ---------------------------------------------------------------------------------------------
 
+/// Speech bubble (left) + Guddi (right). The bubble's tail points at her.
+class GuddiHomeHeader extends StatelessWidget {
+  final GuddiHomeMood mood;
+  final Widget nameBlock; // name + membership number, above the bubble
+  const GuddiHomeHeader({super.key, required this.mood, required this.nameBlock});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Expanded(
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          nameBlock,
+          if (mood.roman != null) ...[
+            const SizedBox(height: 10),
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 300),
+              child: _SpeechBubble(key: ValueKey(mood.roman), roman: mood.roman!, en: mood.en),
+            ),
+          ],
+        ]),
+      ),
+      const SizedBox(width: 6),
+      GuddiFigure(pose: mood.pose, night: mood.night),
+    ]);
+  }
+}
+
+class _SpeechBubble extends StatelessWidget {
+  final String roman;
+  final String? en;
+  const _SpeechBubble({super.key, required this.roman, this.en});
+
+  @override
+  Widget build(BuildContext context) {
+    const border = Color(0x73D9A62E); // gold @ 45%
+    return Stack(clipBehavior: Clip.none, children: [
+      Container(
+        margin: const EdgeInsets.only(right: 6),
+        padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
+        decoration: BoxDecoration(color: AppColors.bg2, borderRadius: BorderRadius.circular(14), border: Border.all(color: border)),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(roman, style: AppFonts.inter(size: 13, weight: FontWeight.w500, height: 1.35)),
+          if (en != null) ...[
+            const SizedBox(height: 3),
+            Text(en!, style: AppFonts.inter(size: 10.5, color: AppColors.textSoft, height: 1.3)),
+          ],
+        ]),
+      ),
+      // Tail, pointing right at Guddi.
+      Positioned(
+        right: 0,
+        top: 16,
+        child: Transform.rotate(
+          angle: 0.785398, // 45°
+          child: Container(
+            width: 12,
+            height: 12,
+            decoration: const BoxDecoration(
+              color: AppColors.bg2,
+              border: Border(top: BorderSide(color: border), right: BorderSide(color: border)),
+            ),
+          ),
+        ),
+      ),
+    ]);
+  }
+}
+
 /// Guddi with a soft backdrop: warm glow by day; at night a dim sky, moon and a few stars, with
 /// Guddi herself dimmed a touch (same approved poses — no separate night art).
 class GuddiFigure extends StatefulWidget {
@@ -177,6 +245,126 @@ class _GuddiFigureState extends State<GuddiFigure> with SingleTickerProviderStat
 }
 
 // ---------------------------------------------------------------------------------------------
+
+/// "THIS WEEK" card: Mon–Sun circles from the user's own deed days, plus the real streak.
+class WeekRowCard extends StatelessWidget {
+  final List<DateTime> weekDays; // Mon..Sun
+  final Set<DateTime> activeDays;
+  final DateTime today; // date-only
+  final int streak;
+  const WeekRowCard({super.key, required this.weekDays, required this.activeDays, required this.today, required this.streak});
+
+  static const _letters = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
+      decoration: BoxDecoration(color: AppColors.bg2, borderRadius: BorderRadius.circular(16), border: Border.all(color: const Color(0x14F6F5EC))),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+          Text('THIS WEEK', style: AppFonts.plexMono(size: 9)),
+          // Hidden at 0 — never a "0 day streak".
+          if (streak > 0) Text('🔥 $streak day streak', style: AppFonts.plexMono(size: 10.5, color: AppColors.gold)),
+        ]),
+        const SizedBox(height: 8),
+        LayoutBuilder(builder: (context, c) {
+          final size = ((c.maxWidth - 6 * 6) / 7).clamp(26.0, 36.0);
+          return Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+            for (var i = 0; i < 7; i++) _dayCircle(i, size),
+          ]);
+        }),
+      ]),
+    );
+  }
+
+  Widget _dayCircle(int i, double size) {
+    final day = weekDays[i];
+    final done = activeDays.contains(day);
+    final isToday = day == today;
+    final future = day.isAfter(today);
+    return Semantics(
+      label: '${_letters[i]}${isToday ? ', today' : ''}${done ? ', acha kaam done' : ''}',
+      child: Opacity(
+        opacity: future ? 0.5 : 1,
+        child: Container(
+          width: size, height: size,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: done ? AppColors.gold : AppColors.text.withOpacity(0.06),
+            border: Border.all(color: isToday ? AppColors.gold : Colors.transparent, width: 2),
+          ),
+          alignment: Alignment.center,
+          child: done
+              ? const Icon(Icons.check_rounded, size: 16, color: AppColors.inkOnGold)
+              : Text(_letters[i], style: AppFonts.inter(size: 11, weight: FontWeight.w600, color: AppColors.textSoft)),
+        ),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------------------------
+
+/// "TODAY'S ACHA KAAM IDEA" card, with curious Guddi. "Do it" opens that deed's submit sheet.
+class AchaKaamIdeaCard extends StatelessWidget {
+  final AchaKaamIdea idea;
+  final VoidCallback? onDo; // null while the global cooldown is on
+  const AchaKaamIdeaCard({super.key, required this.idea, required this.onDo});
+
+  @override
+  Widget build(BuildContext context) {
+    final meta = deedCatalog[idea.deedType];
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+      decoration: BoxDecoration(
+        color: AppColors.gold.withOpacity(0.14),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.gold.withOpacity(0.5)),
+      ),
+      child: Row(children: [
+        // Curious Guddi, head-and-shoulders crop.
+        Container(
+          width: 48, height: 48,
+          clipBehavior: Clip.antiAlias,
+          decoration: BoxDecoration(shape: BoxShape.circle, color: AppColors.gold.withOpacity(0.22)),
+          child: Image.asset(GuddiPoses.curious, fit: BoxFit.cover, alignment: const Alignment(0, -0.85)),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text("TODAY'S ACHA KAAM IDEA", style: AppFonts.plexMono(size: 9, color: AppColors.gold)),
+            const SizedBox(height: 3),
+            Text('${meta != null ? '${meta.icon} ' : ''}${idea.roman}', style: AppFonts.fraunces(size: 15, weight: FontWeight.w600, height: 1.25)),
+            const SizedBox(height: 2),
+            Text(idea.en, style: AppFonts.inter(size: 11, color: AppColors.textSoft)),
+            if (idea.involvesPerson) ...[
+              const SizedBox(height: 4),
+              Text('📷 ${kPhotoTheDeedHint.roman}', style: AppFonts.inter(size: 10.5, weight: FontWeight.w600, color: AppColors.olive)),
+            ],
+          ]),
+        ),
+        const SizedBox(width: 8),
+        SizedBox(
+          height: 44,
+          child: ElevatedButton(
+            onPressed: onDo,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.gold,
+              foregroundColor: AppColors.inkOnGold,
+              disabledBackgroundColor: AppColors.text.withOpacity(0.08),
+              disabledForegroundColor: AppColors.textSoft,
+              padding: const EdgeInsets.symmetric(horizontal: 18),
+              shape: const StadiumBorder(),
+              elevation: 0,
+            ),
+            child: Text('Do it', style: AppFonts.inter(size: 14, weight: FontWeight.w700, color: onDo != null ? AppColors.inkOnGold : AppColors.textSoft)),
+          ),
+        ),
+      ]),
+    );
+  }
+}
 
 /// Today's idea: rotates daily through [achaKaamIdeas], skipping any whose deed is cooling down.
 AchaKaamIdea pickTodaysIdea(DateTime today, bool Function(String deedType) onCooldown) {
