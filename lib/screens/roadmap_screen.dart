@@ -31,7 +31,7 @@ class _RoadmapScreenState extends State<RoadmapScreen> {
   // exact bug diagnosed: local-only state forgot everything the moment this screen was rebuilt
   bool loadingStops = true;
   String? loadError;
-  bool hallOfFameClaimed = false; // new — hides "Log a deed" once this campaign is fully done
+  bool hallOfFameClaimed = false; // new — hides "Acha kaam karein" once this campaign is fully done
   Map<String, bool> claimResults = {}; // stopId -> won, so tapping a claimed stop can show the real result
 
   @override
@@ -66,7 +66,7 @@ class _RoadmapScreenState extends State<RoadmapScreen> {
         // New — real claim results kept, not just which stops were claimed, so tapping an
         // already-claimed stop can show what was genuinely won there, not just "already claimed."
         claimResults = {for (final r in claimRows) r['stop_id'] as String: r['won'] as bool};
-        // New — checked here alongside everything else, so "Log a deed" can correctly disappear
+        // New — checked here alongside everything else, so "Acha kaam karein" can correctly disappear
         // once this campaign's full Hall of Fame has genuinely been claimed, not just deed 12
         // reached (those are two different moments — someone could hit the threshold but not
         // yet have completed the actual Hall of Fame claim).
@@ -316,7 +316,7 @@ class _RoadmapScreenState extends State<RoadmapScreen> {
                 // New — "the actual placeholder" that opens the task list, per the current
                 // direction: the CTA's old quick-actions behavior relocated here, expanded from
                 // one lowest-point pick per category to 3 real choices, donation types excluded.
-                // "Log a deed" hidden entirely once this campaign's Hall of Fame is genuinely
+                // "Acha kaam karein" hidden entirely once this campaign's Hall of Fame is genuinely
                 // claimed — nothing left to log toward, per direction. Equip stays available
                 // regardless, since browsing/equipping owned skins still makes sense afterward.
                 // New — real fix here: purchase and equip both moved entirely to the Skins
@@ -324,7 +324,7 @@ class _RoadmapScreenState extends State<RoadmapScreen> {
                 // equip control at all — genuinely simpler, not a workaround.
                 // New — real fix here: purchase and equip both moved entirely to the Skins
                 // store screen now, but the roadmap still needs a real, visible way to get
-                // there — per direction, restored as a "Switch Skin" CTA alongside "Log a deed",
+                // there — per direction, restored as a "Switch Skin" CTA alongside "Acha kaam karein",
                 // rather than leaving equipping only reachable by navigating there some other way.
                 if (!hallOfFameClaimed) ...[
                   Padding(
@@ -337,7 +337,7 @@ class _RoadmapScreenState extends State<RoadmapScreen> {
                             padding: const EdgeInsets.symmetric(vertical: 14),
                             decoration: BoxDecoration(color: AppColors.gold, borderRadius: BorderRadius.circular(13)),
                             alignment: Alignment.center,
-                            child: Text('📋 Log a deed', style: AppFonts.inter(size: 13.5, weight: FontWeight.w700, color: AppColors.inkOnGold)),
+                            child: Text('📋 Acha kaam karein', style: AppFonts.inter(size: 13.5, weight: FontWeight.w700, color: AppColors.inkOnGold)),
                           ),
                         ),
                       ),
@@ -393,7 +393,7 @@ class _RoadmapScreenState extends State<RoadmapScreen> {
           controller: scrollController,
           padding: const EdgeInsets.fromLTRB(20, 20, 20, 30),
           children: [
-            Text('Log a deed', style: AppFonts.fraunces(size: 16, weight: FontWeight.w600)),
+            Text('Acha kaam karein', style: AppFonts.fraunces(size: 16, weight: FontWeight.w600)),
             const SizedBox(height: 4),
             Text('The easiest tasks in each category — one tap to get started.', style: AppFonts.inter(size: 11.5, color: AppColors.textSoft)),
             const SizedBox(height: 16),

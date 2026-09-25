@@ -19,4 +19,20 @@ void main() {
     }
     expect(hits, isEmpty, reason: hits.join('\n'));
   });
+
+  // Deeds are done, not logged: the only allowed "Log …" copy is the existing "Log a good deed".
+  test('no "Log …" copy in string literals except "Log a good deed"', () {
+    final logCopy = RegExp(r"""['"][^'"]*\bLog (?!a good deed)[^'"]*['"]""");
+    final hits = <String>[];
+    for (final f in Directory('lib').listSync(recursive: true).whereType<File>()) {
+      final path = f.path.replaceAll(r'\', '/');
+      if (!path.endsWith('.dart') || path.contains('/dev_prototypes/')) continue;
+      final lines = f.readAsLinesSync();
+      for (var i = 0; i < lines.length; i++) {
+        if (lines[i].trimLeft().startsWith('//')) continue;
+        if (logCopy.hasMatch(lines[i])) hits.add('$path:${i + 1}: ${lines[i].trim()}');
+      }
+    }
+    expect(hits, isEmpty, reason: hits.join('\n'));
+  });
 }
