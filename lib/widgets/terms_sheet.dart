@@ -23,7 +23,7 @@ const List<_Section> _sections = [
     'Acha Karo is a free app that encourages everyday acha kaam across Pakistan. You do an acha kaam, share a photo, earn points and badges, and see how your city is doing. By using the app, you agree to these terms.',
   ]),
   _Section('2. Who can use it', paragraphs: [
-    "You must be 14 or older. If you're under 18, please use Acha Karo with a parent or guardian's knowledge. One account per person. Keep your login private, because you're responsible for what happens on your account.",
+    "You must be 14 or older. One account per person. If you're under 18, please use Acha Karo with a parent or guardian's knowledge. Keep your login private, because you're responsible for what happens on your account.",
   ]),
   _Section('3. Points', bullets: [
     'Acha Karo points are in-app points only. They have no cash value, and no purchase is needed.',
@@ -70,7 +70,7 @@ const List<_Section> _sections = [
 
 // Urdu summary (خلاصہ) — same approved copy as the website.
 const List<String> _urduSummary = [
-  'اچھا کرو ایک مفت ایپ ہے۔ اچھا کام کریں، تصویر لیں، اور پوائنٹس اور بیجز حاصل کیجیے۔ عمر 14 سال یا اس سے زیادہ، ایک شخص ایک اکاؤنٹ۔ اگر آپ کی عمر 18 سال سے کم ہے تو براہِ مہربانی اچھا کرو اپنے والدین یا سرپرست کے علم میں رکھ کر استعمال کیجیے۔',
+  'اچھا کرو ایک مفت ایپ ہے۔ اچھا کام کریں، تصویر لیں، اور پوائنٹس اور بیجز حاصل کیجیے۔ عمر 14 سال یا اس سے زیادہ، ایک شخص ایک اکاؤنٹ۔ اگر آپ کی عمر 18 سال سے کم ہے تو براہِ کرم اچھا کرو اپنے والدین یا سرپرست کے علم میں رکھ کر استعمال کیجیے۔',
   'پوائنٹس صرف ایپ کے اندر ہیں۔ ان کی کوئی نقد قیمت نہیں، اور کچھ خریدنے کی ضرورت نہیں۔',
   'زیادہ تر اچھے کام فوراً منظور ہو جاتے ہیں۔ کچھ ہماری ٹیم چیک کرتی ہے، عموماً 48 گھنٹوں کے اندر۔',
   'آپ کا درجہ (چوزہ سے شاہین تک) بیجز کی تعداد سے طے ہوتا ہے۔',
