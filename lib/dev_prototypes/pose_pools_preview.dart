@@ -19,7 +19,25 @@ class _App extends StatelessWidget {
         );
     String name(String p) => p.split('/').last.replaceAll('.webp', '');
 
+    Widget tile(String p, Widget child) => Column(mainAxisSize: MainAxisSize.min, children: [
+          child,
+          Text(name(p).replaceAll('guddi_', ''), style: AppFonts.plexMono(size: 8)),
+        ]);
     final List<Widget> items = switch (which) {
+      // Everything on one sheet: each pool, every pose, in its real slot widget.
+      'all' => [
+          label('HOME HEADER · DAY (happy pool)'),
+          Wrap(spacing: 4, runSpacing: 6, children: [for (final p in GuddiPoses.happyPool) tile(p, GuddiFigure(pose: p, night: false, width: 84, height: 122))]),
+          label('HOME HEADER · NIGHT (rest + happy pool)'),
+          Wrap(spacing: 4, runSpacing: 6, children: [for (final p in GuddiPoses.nightPool) tile(p, GuddiFigure(pose: p, night: true, width: 84, height: 122))]),
+          label('CELEBRATION POP-IN (cheer pool)'),
+          Wrap(spacing: 4, runSpacing: 6, children: [for (final p in GuddiPoses.cheerPool) tile(p, SizedBox(width: 84, child: GuddiPopIn(pose: p, screenFraction: 0.1, maxHeight: 120)))]),
+          label('IDEA CARD AVATAR (idea pool)'),
+          for (final p in GuddiPoses.ideaPool) ...[
+            AchaKaamIdeaCard(idea: idea, onDo: () {}, avatarPose: p),
+            const SizedBox(height: 6),
+          ],
+        ],
       'cheer' => [
           for (final p in GuddiPoses.cheerPool) ...[
             label('CELEBRATION POP-IN · ${name(p)}'),
@@ -33,7 +51,7 @@ class _App extends StatelessWidget {
           ],
         ],
       _ => [
-          for (final p in (which == 'night' ? GuddiPoses.happyPool : GuddiPoses.happyPool)) ...[
+          for (final p in (which == 'night' ? GuddiPoses.nightPool : GuddiPoses.happyPool)) ...[
             label('HOME HEADER${which == 'night' ? ' · NIGHT' : ''} · ${name(p)}'),
             GuddiHomeHeader(
               mood: GuddiHomeMood([p], which == 'night' ? GuddiLines.evening : GuddiLines.morning, night: which == 'night'),
@@ -51,7 +69,7 @@ class _App extends StatelessWidget {
         body: Align(
           alignment: Alignment.topLeft,
           child: Container(
-            width: 390, height: 1100, margin: const EdgeInsets.all(12), color: AppColors.bg1,
+            width: 390, height: 1560, margin: const EdgeInsets.all(12), color: AppColors.bg1,
             child: SingleChildScrollView(
               padding: const EdgeInsets.fromLTRB(18, 8, 18, 18),
               child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: items),

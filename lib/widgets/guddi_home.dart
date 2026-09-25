@@ -25,20 +25,21 @@ class GuddiPoses {
   static const proud = '$_dir/guddi_proud.webp'; // sunglasses, arms crossed (slim full body)
   static const pointPhone = '$_dir/guddi_point_phone.webp'; // pointing at the Acha Karo app
   static const showPhone = '$_dir/guddi_show_phone.webp'; // holding the app up (slim full body)
-  // guddi_small (walking / shrug) stays in the first-deed picker, bubble and reminder ask only.
+  static const small = '$_dir/guddi_small.webp'; // walking, easy smile (slim full body)
 
-  // POSE POOLS — each moment rotates through a few poses that fit it (Musa: "different images can
-  // appear randomly"). Moments where the emotion matters (worried, rest, frown, strong, power)
-  // stay fixed.
-  static const happyPool = [smile, chatty, wink, proud, showPhone]; // Home header, everyday
-  static const cheerPool = [cheer, wink, proud]; // done today, thank-you, 3-deed milestone
-  static const ideaPool = [curious, explain, pointPhone]; // idea-card avatar
+  // POSE POOLS — Musa: mix all the Guddi images into rotation. Only the moments where the emotion
+  // matters stay fixed: worried (comeback), frown (rejected), power (top tier only), and strong on
+  // milestones / tier-up (it's also in the everyday pool).
+  static const happyPool = [smile, chatty, wink, proud, showPhone, small, strong]; // Home header
+  static const nightPool = [rest, ...happyPool]; // Home header at night (night treatment applied)
+  static const cheerPool = [cheer, wink, proud, showPhone, small]; // done today, thank-you, 3-deed milestone
+  static const ideaPool = [curious, explain, pointPhone, smile, chatty]; // idea-card avatar
 
   // Slim full-body poses read tiny at header size — shown larger, cropped above the knees.
-  static const tallPoses = {rest, proud, showPhone};
+  static const tallPoses = {rest, proud, showPhone, small};
 
-  static const homePoses = [smile, chatty, wink, proud, showPhone, curious, explain, pointPhone, cheer, worried, frown, rest];
-  static const celebrationPoses = [cheer, wink, proud, strong, power];
+  static const homePoses = [...nightPool, curious, explain, pointPhone, cheer, worried, frown];
+  static const celebrationPoses = [...cheerPool, strong, power];
 }
 
 // Picked once per app open, so Guddi's pose is random between opens but never flickers on
@@ -89,18 +90,18 @@ GuddiHomeMood pickGuddiHomeMood({
   if (!historyLoaded) return m(GuddiPoses.happyPool, null);
 
   if (doneToday) {
-    if (night) return m(const [GuddiPoses.rest], GuddiLines.doneNight);
+    if (night) return m(GuddiPoses.nightPool, GuddiLines.doneNight);
     if (streak >= 2) return m(GuddiPoses.cheerPool, GuddiLines.doneStreak);
     return m(GuddiPoses.cheerPool, GuddiLines.done);
   }
   if (needsFirstDeed) return m(GuddiPoses.happyPool, GuddiLines.firstDeed);
   if (rejectedTodayOnly) return m(const [GuddiPoses.frown], GuddiLines.rejectedToday);
-  if (h < 5) return m(const [GuddiPoses.rest], GuddiLines.lateNight); // after midnight: no nudging
+  if (h < 5) return m(GuddiPoses.nightPool, GuddiLines.lateNight); // after midnight: no nudging
   if (daysSinceLast != null && daysSinceLast >= 3) return m(const [GuddiPoses.worried], GuddiLines.comeback);
   if (streak >= 2 && h < 21) return m(GuddiPoses.happyPool, GuddiLines.streakAlive);
   if (h < 12) return m(GuddiPoses.happyPool, GuddiLines.morning);
   if (h < 17) return m(GuddiPoses.happyPool, GuddiLines.day);
-  return m(GuddiPoses.happyPool, GuddiLines.evening); // evening, and 9 pm–midnight (night treatment)
+  return m(night ? GuddiPoses.nightPool : GuddiPoses.happyPool, GuddiLines.evening); // evening; 9 pm–midnight gets the night pool
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -364,8 +365,10 @@ class AchaKaamIdeaCard extends StatelessWidget {
     GuddiPoses.curious: Alignment(0, -0.85),
     GuddiPoses.explain: Alignment(0.3, -0.9),
     GuddiPoses.pointPhone: Alignment(-0.35, -0.55),
+    GuddiPoses.smile: Alignment(0, -0.8),
+    GuddiPoses.chatty: Alignment(0, -0.8),
   };
-  static const _faceZoom = {GuddiPoses.explain: 1.7, GuddiPoses.pointPhone: 1.6};
+  static const _faceZoom = {GuddiPoses.explain: 1.7, GuddiPoses.pointPhone: 1.6, GuddiPoses.smile: 1.15, GuddiPoses.chatty: 1.15};
 
   @override
   Widget build(BuildContext context) {

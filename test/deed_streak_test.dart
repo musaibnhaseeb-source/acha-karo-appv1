@@ -82,13 +82,13 @@ void main() {
       expect(mood(19).night, isFalse);
       expect(mood(22).line, GuddiLines.evening);
       expect(mood(22).night, isTrue);
-      expect(mood(2).pose, GuddiPoses.rest);
+      expect(mood(2).pool, GuddiPoses.nightPool);
       expect(mood(2).line, GuddiLines.lateNight);
     });
     test('done today', () {
       expect(mood(10, done: true).pool, GuddiPoses.cheerPool);
       expect(mood(10, done: true, streak: 4).roman, contains('4 din'));
-      expect(mood(22, done: true).pose, GuddiPoses.rest);
+      expect(mood(22, done: true).pool, GuddiPoses.nightPool);
       expect(mood(22, done: true).line, GuddiLines.doneNight);
     });
     test('first deed, rejected, comeback, streak alive', () {
@@ -110,10 +110,11 @@ void main() {
     });
   });
 
+  GuddiHomeMood mood22Night() => pickGuddiHomeMood(now: DateTime(2026, 9, 24, 22), historyLoaded: true, needsFirstDeed: false, doneToday: false, rejectedTodayOnly: false, streak: 0, daysSinceLast: 1);
+
   group('pose pools', () {
     test('moments where the emotion matters stay fixed', () {
       for (final pool in [
-        pickGuddiHomeMood(now: DateTime(2026, 9, 24, 2), historyLoaded: true, needsFirstDeed: false, doneToday: false, rejectedTodayOnly: false, streak: 0, daysSinceLast: 1).pool,
         pickGuddiHomeMood(now: DateTime(2026, 9, 24, 10), historyLoaded: true, needsFirstDeed: false, doneToday: false, rejectedTodayOnly: true, streak: 0, daysSinceLast: 1).pool,
         pickGuddiHomeMood(now: DateTime(2026, 9, 24, 10), historyLoaded: true, needsFirstDeed: false, doneToday: false, rejectedTodayOnly: false, streak: 0, daysSinceLast: 6).pool,
       ]) {
@@ -122,7 +123,7 @@ void main() {
     });
 
     test('stable for this app open (same offset → same pose), taps cycle the whole pool', () {
-      for (final pool in [GuddiPoses.happyPool, GuddiPoses.cheerPool, GuddiPoses.ideaPool]) {
+      for (final pool in [GuddiPoses.happyPool, GuddiPoses.nightPool, GuddiPoses.cheerPool, GuddiPoses.ideaPool]) {
         expect(pickFromPool(pool), pickFromPool(pool));
         final seen = {for (var i = 0; i < pool.length; i++) pickFromPool(pool, offset: i)};
         expect(seen, pool.toSet());
@@ -130,11 +131,14 @@ void main() {
       }
     });
 
-    test('pools only use the approved poses (no guddi_small, no excluded art)', () {
-      final all = {...GuddiPoses.happyPool, ...GuddiPoses.cheerPool, ...GuddiPoses.ideaPool};
-      expect(all.any((p) => p.contains('small')), isFalse);
+    test('power (anime) never rotates; night pool = rest + happy pool', () {
+      final all = {...GuddiPoses.nightPool, ...GuddiPoses.cheerPool, ...GuddiPoses.ideaPool};
       expect(all.contains(GuddiPoses.power), isFalse); // top tier only
-      expect(all.contains(GuddiPoses.strong), isFalse); // milestones / tier-up only
+      expect(all.contains(GuddiPoses.worried), isFalse); // comeback only
+      expect(all.contains(GuddiPoses.frown), isFalse); // rejected only
+      expect(GuddiPoses.nightPool.first, GuddiPoses.rest);
+      expect(GuddiPoses.nightPool.skip(1).toList(), GuddiPoses.happyPool);
+      expect(mood22Night().pool, GuddiPoses.nightPool);
     });
   });
 
