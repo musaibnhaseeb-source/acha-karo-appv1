@@ -34,7 +34,7 @@ class DailyReminder {
   // the in-app streak isn't a persisted, real value yet.)
   static const List<(String en, String ur)> messages = [
     ('Guddi is waiting 💛 Did you do an acha kaam today?', 'گڈی انتظار کر رہی ہے 💛 آج کوئی اچھا کام کیا؟'),
-    ('Small things count. Helped someone today? Do one acha kaam in 30 seconds.', 'چھوٹی باتیں بھی اہم ہیں۔ آج ایک اچھا کام کریں، صرف 30 سیکنڈ!'),
+    ('Helped someone today? Do one acha kaam in 30 seconds.', 'آج کسی کی مدد کی؟ ایک اچھا کام کریں، صرف 30 سیکنڈ!'),
     ('Before the day ends, do one good thing 💛', 'دن ختم ہونے سے پہلے، ایک اچھا کام کریں 💛'),
     ('Guddi missed you today 🙂 Anything kind happen?', 'گڈی نے آج آپ کو یاد کیا 🙂 کوئی اچھا کام ہوا؟'),
   ];

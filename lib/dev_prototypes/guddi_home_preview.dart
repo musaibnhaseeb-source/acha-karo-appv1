@@ -3,6 +3,8 @@ import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../data/tiers.dart';
 import '../screens/home_screen.dart';
+import '../screens/profile_screen.dart';
+import '../data/badges.dart';
 import '../state/app_state.dart';
 import '../theme/app_theme.dart';
 import '../widgets/daily_milestone_animation.dart';
@@ -26,6 +28,8 @@ class _PreviewAppState extends AppState {
   _PreviewAppState({required DateTime now, required bool deedToday, required int priorDays, int gapDays = 1}) {
     user.name = 'Ayesha Preview';
     user.points = 40 + 10 * priorDays;
+    final n = int.tryParse(Uri.base.queryParameters['badges'] ?? '') ?? 5;
+    user.badges = [for (var i = 0; i < n && i < badgeDefs.length; i++) badgeDefs[(i * 7) % badgeDefs.length].id];
     deedHistoryLoaded = true;
     final day = DateTime(now.year, now.month, now.day, 12);
     deedsLog = [
@@ -132,7 +136,7 @@ class _PreviewAppAppState extends State<_PreviewApp> {
             child: ChangeNotifierProvider<AppState>.value(
               key: ValueKey('$hour$deedToday$priorDays$away'),
               value: state,
-              child: Navigator(key: _homeNav, onGenerateRoute: (_) => MaterialPageRoute(builder: (_) => const HomeScreen())),
+              child: Navigator(key: _homeNav, onGenerateRoute: (_) => MaterialPageRoute(builder: (_) => Uri.base.queryParameters['screen'] == 'profile' ? const ProfileScreen() : const HomeScreen())),
             ),
           ),
         ]),

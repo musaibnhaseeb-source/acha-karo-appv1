@@ -15,7 +15,7 @@ List<GuddiTourStep> _fullSteps() => [
       const GuddiTourStep(image: 'assets/images/guddi/guddi_wink.webp', en: "Hi! I'm Guddi. Every good deed you do matters to me.", ur: 'سلام! میں گڈی ہوں۔ آپ کا ہر اچھا کام میرے لیے اہم ہے۔'),
       GuddiTourStep(target: _deedKey, image: 'assets/images/guddi/guddi_point_phone.webp', en: 'Did something kind today? Tap a circle to start.', ur: 'آج کوئی اچھا کام کریں، یہاں سے شروع کریں۔'),
       GuddiTourStep(target: _boardKey, image: 'assets/images/guddi/guddi_proud.webp', en: 'Deeds earn points. Climb the leaderboard!', ur: 'ہر اچھے کام پر پوائنٹس۔ لیڈر بورڈ پر آگے بڑھیں!'),
-      const GuddiTourStep(image: 'assets/images/guddi/guddi_show_phone.webp', en: 'Do your first good deed now. It takes 30 seconds!', ur: 'اپنا پہلا اچھا کام ابھی کریں، صرف 30 سیکنڈ میں!'),
+      const GuddiTourStep(image: 'assets/images/guddi/guddi_show_phone.webp', en: 'Do your first good deed now. It takes 30 seconds!', ur: 'ابھی اپنا پہلا اچھا کام کریں، صرف 30 سیکنڈ میں!'),
     ];
 
 List<GuddiTourStep> _returningSteps() => [
@@ -26,7 +26,7 @@ List<GuddiTourStep> _returningSteps() => [
         en: 'Did something kind today? Tap a circle to start.',
         ur: 'آج کوئی اچھا کام کریں، یہاں سے شروع کریں۔',
       ),
-      const GuddiTourStep(image: 'assets/images/guddi/guddi_show_phone.webp', en: 'Do your first good deed now. It takes 30 seconds!', ur: 'اپنا پہلا اچھا کام ابھی کریں، صرف 30 سیکنڈ میں!'),
+      const GuddiTourStep(image: 'assets/images/guddi/guddi_show_phone.webp', en: 'Do your first good deed now. It takes 30 seconds!', ur: 'ابھی اپنا پہلا اچھا کام کریں، صرف 30 سیکنڈ میں!'),
     ];
 
 // A stand-in Home: the deed section near the top and the leaderboard tile far enough down that

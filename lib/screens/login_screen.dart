@@ -92,7 +92,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 Text('Do something good. Get seen for it.', style: AppFonts.fraunces(size: 22, weight: FontWeight.w600)),
                 const SizedBox(height: 6),
                 Text(
-                  'Log small acts of civic good — clear litter, feed a stray, water a plant — earn points, and climb the weekly board.',
+                  'Do acha kaam — clear litter, feed a stray, water a plant — earn points, and climb the weekly board.',
                   style: AppFonts.inter(size: 12.5, color: AppColors.textSoft, height: 1.5),
                 ),
                 const SizedBox(height: 22),

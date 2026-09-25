@@ -22,6 +22,7 @@ import '../utils/daily_reminder.dart';
 import '../widgets/guddi_tour.dart';
 import '../widgets/first_deed.dart';
 import '../widgets/guddi_home.dart';
+import '../widgets/home_banner.dart';
 import '../utils/deed_streak.dart';
 
 String _formatRemaining(Duration d) {
@@ -95,7 +96,7 @@ class _HomeScreenState extends State<HomeScreen> {
   static const _stepLogDeedEn = 'Did something kind today? Tap a circle to start.';
   static const _stepLogDeedUr = 'آج کوئی اچھا کام کریں، یہاں سے شروع کریں۔';
   static const _stepFirstDeedEn = 'Do your first good deed now. It takes 30 seconds!';
-  static const _stepFirstDeedUr = 'اپنا پہلا اچھا کام ابھی کریں، صرف 30 سیکنڈ میں!';
+  static const _stepFirstDeedUr = 'ابھی اپنا پہلا اچھا کام کریں، صرف 30 سیکنڈ میں!';
 
   List<GuddiTourStep> _fullTour() => [
         const GuddiTourStep(
@@ -201,6 +202,7 @@ class _HomeScreenState extends State<HomeScreen> {
       daysSinceLast: daysSinceLastActive(activeDays, now),
     );
     final idea = pickTodaysIdea(today, (type) => state.cooldownRemaining(type) > Duration.zero);
+    void openTodaysIdea() => openSubmitDeedFlow(context, idea.deedType, photoHint: idea.involvesPerson ? kPhotoTheDeedHint : null);
 
     return Scaffold(
       key: _scaffoldKey,
@@ -269,18 +271,26 @@ class _HomeScreenState extends State<HomeScreen> {
             ],
           ),
           const SizedBox(height: 12),
-          // Name + Guddi's line on the left, Guddi on the right.
-          GuddiHomeHeader(
+          Text(state.user.name.split(' ').first, style: AppFonts.fraunces(size: 22, weight: FontWeight.w600)),
+          if (state.membershipNumber != null) ...[
+            const SizedBox(height: 2),
+            Text(state.membershipNumber!, style: AppFonts.plexMono(size: 9)),
+          ],
+          const SizedBox(height: 4),
+          // Musa's pick ("Home A"): time-tinted banner with Guddi's line and ONE action.
+          HomeBanner(
             mood: mood,
-            nameBlock: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(state.user.name.split(' ').first, style: AppFonts.fraunces(size: 22, weight: FontWeight.w600)),
-              if (state.membershipNumber != null) ...[
-                const SizedBox(height: 2),
-                Text(state.membershipNumber!, style: AppFonts.plexMono(size: 9)),
-              ],
-            ]),
+            hour: now.hour,
+            actionLabel: state.needsFirstDeed
+                ? 'Pehla acha kaam karein'
+                : doneToday
+                    ? 'Ek aur acha kaam karein'
+                    : 'Aaj ka acha kaam karein',
+            onAct: state.needsFirstDeed
+                ? () => showFirstDeedPicker(context)
+                : (state.isGlobalCooldownActive ? null : openTodaysIdea),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 12),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             crossAxisAlignment: CrossAxisAlignment.end,
@@ -296,16 +306,11 @@ class _HomeScreenState extends State<HomeScreen> {
               ]),
             ],
           ),
-          // Week row + streak only once real deed history has loaded — never a guessed/zero state.
-          if (state.deedHistoryLoaded) ...[
-            const SizedBox(height: 12),
-            WeekRowCard(weekDays: currentWeekDays(now), activeDays: activeDays, today: today, streak: streak),
-          ],
           const SizedBox(height: 10),
-          AchaKaamIdeaCard(
-            idea: idea,
-            onDo: state.isGlobalCooldownActive ? null : () => openSubmitDeedFlow(context, idea.deedType, photoHint: idea.involvesPerson ? kPhotoTheDeedHint : null),
-          ),
+          // Today ring + streak (only once real deed history has loaded) + next-tier progress.
+          HomeProgressStrip(streak: streak, doneToday: doneToday, badgeCount: state.user.badges.length, historyLoaded: state.deedHistoryLoaded),
+          const SizedBox(height: 10),
+          StoryIdeaCard(idea: idea, onDo: state.isGlobalCooldownActive ? null : openTodaysIdea),
           const SizedBox(height: 22),
           // Heading + rings wrapped together as one spotlight target for the Guddi tour.
           KeyedSubtree(

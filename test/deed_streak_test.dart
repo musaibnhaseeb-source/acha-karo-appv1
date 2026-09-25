@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:acha_karo/utils/deed_streak.dart';
 import 'package:acha_karo/widgets/guddi_home.dart';
 import 'package:acha_karo/data/guddi_content.dart';
+import 'package:acha_karo/utils/daily_reminder.dart';
 
 // Real streak + week row (from the user's own deed history) and Guddi's Home mood selection.
 
@@ -94,7 +95,7 @@ void main() {
       expect(mood(10, first: true, since: null).line, GuddiLines.firstDeed);
       expect(mood(10, rejected: true).pose, GuddiPoses.frown);
       expect(mood(10, since: 5).pose, GuddiPoses.worried);
-      expect(mood(10, streak: 3).roman, 'Lagatar 3 din! Aaj bhi karein? 🔥');
+      expect(mood(10, streak: 3).roman, 'Lagatar 3 din! Aaj bhi acha kaam karein? 🔥');
     });
     test('copy rules: no religious framing, never log/likhein', () {
       final all = [
@@ -105,6 +106,34 @@ void main() {
       final text = [for (final l in all) '${l.roman} ${l.en ?? ''}', for (final i in achaKaamIdeas) '${i.roman} ${i.en}'].join(' ').toLowerCase();
       for (final banned in ['neki', 'sawab', 'deen', 'likh', ' log ', 'log karein']) {
         expect(text.contains(banned), isFalse, reason: banned);
+      }
+    });
+  });
+
+  group('copy rules (Musa)', () {
+    // Every user-facing string in guddi_content.dart + the daily reminder texts.
+    final all = <String>[
+      for (final l in [
+        GuddiLines.firstDeed, GuddiLines.morning, GuddiLines.day, GuddiLines.evening, GuddiLines.lateNight,
+        GuddiLines.streakAlive, GuddiLines.comeback, GuddiLines.rejectedToday, GuddiLines.done, GuddiLines.doneStreak,
+        GuddiLines.doneNight, GuddiCelebrationLines.strong, GuddiCelebrationLines.topTier, kPhotoTheDeedHint,
+      ]) ...[l.roman, if (l.en != null) l.en!],
+      for (final i in achaKaamIdeas) ...[i.roman, i.en],
+      for (final (en, ur) in DailyReminder.messages) ...[en, ur],
+    ];
+
+    test('never a bare "karein" / "کریں" — always "acha kaam karein"', () {
+      final bareRoman = RegExp(r'(?<!acha kaam )karein', caseSensitive: false);
+      final bareUrdu = RegExp(r'(?<!اچھا کام )کریں');
+      for (final s in all) {
+        expect(bareRoman.hasMatch(s), isFalse, reason: s);
+        expect(bareUrdu.hasMatch(s), isFalse, reason: s);
+      }
+    });
+
+    test('no "small" acha kaam (chhota / small / چھوٹا)', () {
+      for (final s in all) {
+        expect(RegExp(r'chhot|\bsmall\b|چھوٹ', caseSensitive: false).hasMatch(s), isFalse, reason: s);
       }
     });
   });

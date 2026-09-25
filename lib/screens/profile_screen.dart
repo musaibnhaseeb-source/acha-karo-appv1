@@ -2,12 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../theme/app_theme.dart';
 import '../state/app_state.dart';
-import '../data/tiers.dart';
 import '../data/badges.dart';
 import '../widgets/edit_profile_sheet.dart';
 import '../widgets/home_side_sheet.dart';
 import '../widgets/animated_wallpaper.dart';
 import '../widgets/big_tile.dart';
+import '../widgets/profile_tier_banner.dart';
 import 'limited_edition_screen.dart';
 import 'skins_screen.dart';
 import 'invites_screen.dart';
@@ -54,7 +54,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Widget build(BuildContext context) {
     final state = context.watch<AppState>();
     final user = state.user;
-    final tier = getUserTier(user.badges.length);
     final rank = state.myRank;
 
     return Scaffold(
@@ -136,12 +135,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         state.rankDataReady ? '#$rank overall · ${user.points} pts' : '${user.points} pts',
                         style: AppFonts.plexMono(size: 11, color: AppColors.textSoft),
                       ),
-                      const SizedBox(height: 6),
-                      Row(mainAxisSize: MainAxisSize.min, children: [
-                        Text(tier.icon, style: const TextStyle(fontSize: 16)),
-                        const SizedBox(width: 4),
-                        Text(tier.name, style: AppFonts.nastaliq(size: 16, color: AppColors.gold)),
-                      ]),
                       const SizedBox(height: 14),
                       GestureDetector(
                         onTap: () => _openEditSheet(context),
@@ -153,7 +146,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ),
                     ]),
                   ),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 18),
+                  // Musa's pick ("Profile B"): tier banner with Guddi, next-tier bar and the
+                  // user's 3 best badges. The tier emblem/name that sat under the name moved here.
+                  ProfileTierBanner(earnedBadgeIds: user.badges),
+                  const SizedBox(height: 18),
                   // Resized to match Home's tile dimensions, per direction — Badges, Limited
                   // Edition, and Skins now grouped together here as a real trio, all using the
                   // same shared BigTile widget Home uses, for genuine visual consistency rather
