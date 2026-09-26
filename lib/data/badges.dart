@@ -33,6 +33,11 @@ bool allCategoriesTouched(AppState s) {
 // below also check AppState.rankDataReady first, so an unloaded/empty leaderboard never counts.
 int computeRank(AppState s) => s.myRank;
 
+// Which of the badges whose check() currently passes may show: a frozen badge is never newly
+// granted, but one the person already holds stays. Used by AppState._applyBadgeUpdate().
+List<String> grantableBadgeIds(Iterable<String> passing, Set<String> held, Set<String> frozen) =>
+    passing.where((id) => held.contains(id) || !frozen.contains(id)).toList();
+
 // Not `const` — this list holds closures (the `check` functions), and closures can never be
 // compile-time constants in Dart, no matter how simple their body is. `final` still means this
 // list is created exactly once and never reassigned, which is all we actually need here.
@@ -98,7 +103,10 @@ final List<BadgeDef> badgeDefs = [
   // Rank badges only trust a rank once real leaderboard data has loaded (see
   // AppState.rankDataReady). Until then they just keep whatever the user already holds —
   // never newly granted from an empty/failed load, and never dropped for lack of data either.
+  // top1 is "at least once", so it's sticky: everRankedFirst is only ever set once rankDataReady
+  // (AppState._applyBadgeUpdate), and a held top1 is never dropped when rank later falls.
+  // Frozen badges are filtered out in _applyBadgeUpdate, not here.
   BadgeDef(id: 'top10', name: 'Top 10', icon: '🏅', req: 'Rank in top 10', tier: 'silver', category: 'special', check: (s) => s.rankDataReady ? computeRank(s) <= 10 : s.user.badges.contains('top10')),
   BadgeDef(id: 'top3', name: 'Top 3', icon: '🥉', req: 'Rank in top 3', tier: 'gold', category: 'special', check: (s) => s.rankDataReady ? computeRank(s) <= 3 : s.user.badges.contains('top3')),
-  BadgeDef(id: 'top1', name: 'Ranked First', icon: '🏆', req: 'Reach rank #1 at least once', tier: 'platinum', category: 'special', check: (s) => s.rankDataReady ? s.everRankedFirst == true : s.user.badges.contains('top1')),
+  BadgeDef(id: 'top1', name: 'Ranked First', icon: '🏆', req: 'Reach rank #1 at least once', tier: 'platinum', category: 'special', check: (s) => s.everRankedFirst || s.user.badges.contains('top1')),
 ];

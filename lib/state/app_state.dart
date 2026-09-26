@@ -207,7 +207,19 @@ class AppState extends ChangeNotifier {
   List<ModerationQueueItem> moderationQueue = [];
   Map<String, DateTime> lastLoggedAt = {};
   bool everRankedFirst = false;
+  // Badge ids an admin has frozen (badge_definitions.frozen). Loaded at sign-in and on every
+  // loadRemoteConfig(); _applyBadgeUpdate() never newly grants these.
+  Set<String> _frozenBadgeIds = {};
   String lastSeenTier = 'chick';
+
+  // A failed read keeps the last known set (empty on first load, i.e. nothing frozen) and never
+  // blocks sign-in — the RLS insert policy still refuses frozen badges server-side regardless.
+  Future<void> _loadFrozenBadgeIds() async {
+    try {
+      final rows = await Supabase.instance.client.from('badge_definitions').select('id').eq('frozen', true);
+      _frozenBadgeIds = rows.map<String>((r) => r['id'] as String).toSet();
+    } catch (_) {}
+  }
   List<FeedbackEntry> feedback = [];
 
   // Real write now — was purely local before, meaning feedback vanished the moment the app
@@ -317,6 +329,7 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> loadRemoteConfig() async {
+    await _loadFrozenBadgeIds();
     try {
       final campaignRows = await Supabase.instance.client.from('campaigns').select();
       final campaigns = campaignRows.map<Campaign>((c) => Campaign(
@@ -1125,12 +1138,11 @@ class AppState extends ChangeNotifier {
   TierDef? _applyBadgeUpdate() {
     if (rankDataReady && computeRank(this) == 1) everRankedFirst = true;
     final oldBadges = user.badges.toSet();
-    // Real fix here, reverted: freeze/unfreeze is already handled entirely at the database
-    // level (app_config.badges_frozen + an RLS check on user_badges' insert policy) — the app
-    // was never meant to know this exists at all, it just tries to write and the database
-    // silently allows or refuses depending on the flag. No client-side filtering needed or
-    // wanted here.
-    user.badges = badgeDefs.where((b) => b.check(this)).map((b) => b.id).toList();
+    // Freeze is enforced by the database (user_badges' RLS insert policy refuses any badge whose
+    // badge_definitions.frozen = true), but the write below is fire-and-forget — a refused
+    // insert never reached the UI, so a frozen badge still showed locally. Frozen badges are now
+    // never newly unlocked here; ones the person already holds (loaded from user_badges) stay.
+    user.badges = grantableBadgeIds(badgeDefs.where((b) => b.check(this)).map((b) => b.id), oldBadges, _frozenBadgeIds);
     final newlyUnlocked = user.badges.where((id) => !oldBadges.contains(id)).toList();
     if (newlyUnlocked.isNotEmpty) _writeNewBadges(newlyUnlocked);
 
@@ -1480,6 +1492,7 @@ class AppState extends ChangeNotifier {
         // Falls through to full local recomputation below regardless.
       }
 
+      await _loadFrozenBadgeIds();
       _applyBadgeUpdate(); // recompute badges/tier from the real history just loaded
     } catch (_) {
       // Deed history failing to load shouldn't block sign-in entirely — the person still gets
