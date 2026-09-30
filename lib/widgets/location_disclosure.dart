@@ -62,10 +62,12 @@ class _LocationDisclosureDialog extends StatelessWidget {
           const SizedBox(height: 10),
           Text('Share your location with this acha kaam?', style: AppFonts.fraunces(size: 16, weight: FontWeight.w600)),
           _point('What we collect',
-              "Your phone's approximate location at the moment you submit, saved with this acha kaam. Only when you submit, never in the background."),
+              "Your phone's approximate location (about 100 m) at the moment you submit, saved with this acha kaam. Only when you submit, never in the background."),
           _point('Why', 'It helps a moderator check that the acha kaam really happened.'),
           _point('Who can see it',
-              "Only you and Acha Karo moderators. It isn't shown on your profile, on leaderboards or to friends. Partner NGOs only ever see area-level totals, never your exact location."),
+              // UNCONFIRMED: depends on the live deeds RLS (only the owner and moderators can select
+              // gps_lat/gps_lng). Pending confirmation via the Supervisor/Musa.
+              "Only you and Acha Karo moderators. It isn't shown on your profile, on leaderboards or to friends."),
           _point(
             'If you say no',
             isDonation
