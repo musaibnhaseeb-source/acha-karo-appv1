@@ -11,6 +11,7 @@ import '../data/tiers.dart';
 import '../utils/notifications.dart';
 import '../data/remote_config.dart';
 import '../utils/app_version.dart';
+import '../utils/image_metadata.dart';
 
 const Duration cooldownDuration = Duration(hours: 1); // same 1hr cooldown as the original
 
@@ -990,12 +991,16 @@ class AppState extends ChangeNotifier {
   // no photo or the upload fails, in which case the deed record still gets created either way.
   // Bytes, not dart:io File — File is unusable on Flutter web (no real filesystem), so
   // uploadBinary over raw bytes is what actually works on every platform, not just a web
-  // special-case. fileName is only ever used to recover the original extension.
-  Future<String?> _uploadDeedPhoto(String uid, Uint8List photoBytes, String? fileName) async {
+  // special-case.
+  // Metadata (EXIF GPS, XMP...) is stripped first — see image_metadata.dart. If the photo can't
+  // be cleaned, nothing is uploaded rather than the original. The extension (and so the stored
+  // content type) comes from the cleaned bytes, not the picked file name.
+  Future<String?> _uploadDeedPhoto(String uid, Uint8List photoBytes) async {
     try {
-      final ext = (fileName != null && fileName.contains('.')) ? fileName.split('.').last.toLowerCase() : 'jpg';
-      final path = '$uid/${DateTime.now().millisecondsSinceEpoch}.$ext';
-      await Supabase.instance.client.storage.from('deed-photos').uploadBinary(path, photoBytes);
+      final clean = await stripImageMetadata(photoBytes);
+      if (clean == null) return null;
+      final path = '$uid/${DateTime.now().millisecondsSinceEpoch}.${clean.extension}';
+      await Supabase.instance.client.storage.from('deed-photos').uploadBinary(path, clean.bytes);
       return path;
     } catch (_) {
       return null; // best-effort, same "don't block the person" reasoning as the other writes
@@ -1033,7 +1038,7 @@ class AppState extends ChangeNotifier {
     final willFlag = repeatFlag || gpsFailed || isDonation;
     final awardedPoints = meta.points;
     final uid = Supabase.instance.client.auth.currentUser?.id;
-    final photoPath = (uid != null && photoBytes != null) ? await _uploadDeedPhoto(uid, photoBytes, photoFileName) : null;
+    final photoPath = (uid != null && photoBytes != null) ? await _uploadDeedPhoto(uid, photoBytes) : null;
 
     if (willFlag) {
       lastLoggedAt[type] = DateTime.now(); // cooldown must start here too — a flagged/pending
