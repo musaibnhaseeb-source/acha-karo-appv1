@@ -8,9 +8,10 @@ import '../data/deed_catalog.dart';
 import '../data/deed_form_fields.dart';
 import '../data/guddi_content.dart';
 import 'guddi_home.dart';
+import 'location_disclosure.dart';
 
 // Rebuilt per the simplified submission design: Photo mode is now the ONLY way to submit — no
-// Honor mode, no location choice (GPS is captured automatically instead), no free-text or plain
+// Honor mode (location is asked for via location_disclosure.dart at submit), no free-text or plain
 // numeric questions. Only a predefined dropdown remains where one exists (6 of 32 deeds); the
 // other 26 are photo-only. Donation-type deeds get specific guidance ("photo of food or a
 // receipt") and are always sent to a moderator, same rule enforced in AppState.
@@ -34,6 +35,7 @@ class _SubmitDeedModalState extends State<SubmitDeedModal> {
   String? photoFileName;
   final Map<String, String> details = {};
   bool submitting = false;
+  bool sharingLocation = false; // drives the "Capturing location…" line
 
   Future<void> _pickPhoto() async {
     final picker = ImagePicker();
@@ -67,9 +69,13 @@ class _SubmitDeedModalState extends State<SubmitDeedModal> {
   }
 
   Future<void> _handleSubmit() async {
-    setState(() => submitting = true);
+    // Location disclosure comes first, before any OS permission prompt. Dismissing it goes back
+    // to the form without sending anything.
+    final share = await confirmLocationSharing(context, isDonation: donationDeedTypes.contains(widget.type));
+    if (share == null || !mounted) return;
+    setState(() { submitting = true; sharingLocation = share; });
     final appState = context.read<AppState>();
-    final result = await appState.submitPhotoDeed(widget.type, details, photoBytes: photoBytes, photoFileName: photoFileName, campaignId: widget.campaignId);
+    final result = await appState.submitPhotoDeed(widget.type, details, photoBytes: photoBytes, photoFileName: photoFileName, campaignId: widget.campaignId, shareLocation: share);
     if (mounted) Navigator.of(context).pop(result);
   }
 
@@ -138,7 +144,7 @@ class _SubmitDeedModalState extends State<SubmitDeedModal> {
                       Text(
                         isDonation
                             ? 'Please show a photo of the food or a receipt — donations are always reviewed by a moderator.'
-                            : 'Your location is captured automatically with this photo — nothing else to fill in.',
+                            : 'Just the photo — nothing else to fill in.',
                         style: AppFonts.inter(size: 10.5, color: AppColors.textSoft, height: 1.4),
                       ),
                     ]),
@@ -205,7 +211,7 @@ class _SubmitDeedModalState extends State<SubmitDeedModal> {
                         : Text('Submit deed', style: AppFonts.inter(size: 15, weight: FontWeight.w700, color: valid ? AppColors.inkOnGold : AppColors.textSoft)),
                   ),
                 ),
-                if (submitting)
+                if (submitting && sharingLocation)
                   Padding(
                     padding: const EdgeInsets.only(top: 8),
                     child: Text('Capturing location…', textAlign: TextAlign.center, style: AppFonts.inter(size: 10.5, color: AppColors.textSoft)),

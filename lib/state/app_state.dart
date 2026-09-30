@@ -1002,7 +1002,7 @@ class AppState extends ChangeNotifier {
     }
   }
 
-  Future<SubmitResult> submitPhotoDeed(String type, Map<String, String> details, {Uint8List? photoBytes, String? photoFileName, String? campaignId}) async {
+  Future<SubmitResult> submitPhotoDeed(String type, Map<String, String> details, {Uint8List? photoBytes, String? photoFileName, String? campaignId, bool shareLocation = true}) async {
     final meta = deedCatalog[type];
     if (meta == null) return SubmitResult(flagged: false, leveledUpTier: null, newMilestones: []);
 
@@ -1024,7 +1024,9 @@ class AppState extends ChangeNotifier {
       return SubmitResult(flagged: false, leveledUpTier: null, newMilestones: [], blockedByCooldown: true);
     }
 
-    final position = await _attemptGpsCapture();
+    // shareLocation is the person's answer to the location disclosure (location_disclosure.dart).
+    // Saying no skips GPS entirely (no OS prompt) and takes the same moderated path as a GPS failure.
+    final position = shareLocation ? await _attemptGpsCapture() : null;
     final gpsFailed = position == null;
     final repeatFlag = countTodayByType(type) >= 2;
     final isDonation = donationDeedTypes.contains(type);
@@ -1038,7 +1040,11 @@ class AppState extends ChangeNotifier {
       // submission still "used up" this deed type for the hour, same as an approved one.
       final reasons = <String>[];
       if (repeatFlag) reasons.add('Same deed type logged 3+ times today — repetition guard triggered.');
-      if (gpsFailed) reasons.add('GPS location could not be captured at submission.');
+      if (!shareLocation) {
+        reasons.add('Submitter chose not to share location.');
+      } else if (gpsFailed) {
+        reasons.add('GPS location could not be captured at submission.');
+      }
       if (isDonation) reasons.add('Donation-category submission — always reviewed by a moderator.');
       final evidence = details.entries.where((e) => e.value.isNotEmpty).map((e) => '${e.key}: ${e.value}').join(' · ');
       final reasonText = reasons.join(' ');
