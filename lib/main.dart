@@ -15,6 +15,7 @@ import 'utils/notifications.dart';
 import 'utils/daily_reminder.dart';
 import 'widgets/update_available_dialog.dart';
 import 'widgets/guddi_loading.dart';
+import 'utils/startup_loader.dart';
 import 'supabase_config.dart';
 
 // App entry point — connects to Supabase (all real data lives there, read/written via AppState),
@@ -100,6 +101,9 @@ class _RootScreenState extends State<RootScreen> with WidgetsBindingObserver {
   String? pendingEmail; // set once a code has been sent, needed by OtpVerifyScreen
   StreamSubscription<AuthState>? _authSub;
   bool _updateDialogShown = false; // guards the update popup from showing more than once per state change
+  StartupLoader? _startupLoader; // cold-start profile load, see _checkExistingSession
+  bool _startupFailed = false; // offline/failed: Guddi shows Retry instead of the loading dots
+  int _startupAttempt = 0;
 
   @override
   void initState() {
@@ -121,6 +125,8 @@ class _RootScreenState extends State<RootScreen> with WidgetsBindingObserver {
     _authSub = Supabase.instance.client.auth.onAuthStateChange.listen((data) {
       if (data.event == AuthChangeEvent.signedOut && mounted) {
         DailyReminder.cancelAll(); // no "Guddi is waiting" nudges for a signed-out phone
+        _disposeStartupLoader();
+        _startupFailed = false;
         context.read<AppState>().resetLocalState();
         Navigator.of(context).popUntil((route) => route.isFirst);
         setState(() {
@@ -135,6 +141,7 @@ class _RootScreenState extends State<RootScreen> with WidgetsBindingObserver {
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _authSub?.cancel();
+    _disposeStartupLoader();
     super.dispose();
   }
 
@@ -152,6 +159,10 @@ class _RootScreenState extends State<RootScreen> with WidgetsBindingObserver {
           statusBarIconBrightness: Brightness.light,
         ),
       );
+    }
+    // Cold start failed offline (M1): coming back to the app retries automatically.
+    if (appState == AppLifecycleState.resumed && screen == RootScreenState.checkingSession && _startupFailed) {
+      _retryStartup();
     }
     // Only refresh once actually signed in and past setup — no point re-fetching a profile that
     // doesn't exist yet, or interrupting the login/OTP flow.
@@ -171,17 +182,39 @@ class _RootScreenState extends State<RootScreen> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _checkExistingSession() async {
+  void _checkExistingSession() {
     final session = Supabase.instance.client.auth.currentSession;
     if (session == null) {
       setState(() => screen = RootScreenState.login);
       return;
     }
-    final found = await context.read<AppState>().tryLoadExistingProfile();
-    if (!mounted) return;
+    // M1 fix: this load used to have no catch and no timeout, so offline it hung on the loading
+    // screen forever. StartupLoader reports a failure (error, or not done after 15 s) so Guddi
+    // can show the offline state with Retry; a late success still goes straight to the app.
+    _startupLoader ??= StartupLoader(load: context.read<AppState>().tryLoadExistingProfile, onOutcome: _onStartupOutcome);
+    _startupLoader!.start();
+  }
+
+  void _onStartupOutcome(StartupOutcome outcome) {
+    if (!mounted || screen != RootScreenState.checkingSession) return;
+    if (outcome == StartupOutcome.failed) {
+      // Session gone (signed out / refresh token revoked) — that's Login, not "offline".
+      if (Supabase.instance.client.auth.currentSession == null) {
+        _disposeStartupLoader();
+        setState(() => screen = RootScreenState.login);
+      } else {
+        setState(() => _startupFailed = true);
+      }
+      return;
+    }
+    _disposeStartupLoader();
+    final found = outcome == StartupOutcome.found;
     // Signed in but somehow no profile row (shouldn't normally happen) — fall back to Setup
     // rather than getting stuck.
-    setState(() => screen = found ? RootScreenState.app : RootScreenState.setup);
+    setState(() {
+      _startupFailed = false;
+      screen = found ? RootScreenState.app : RootScreenState.setup;
+    });
     // New — real update check, placed here specifically rather than earlier in initState(),
     // since a genuine, confirmed session is needed before this can do anything meaningful.
     if (found) {
@@ -189,6 +222,19 @@ class _RootScreenState extends State<RootScreen> with WidgetsBindingObserver {
       context.read<AppState>().loadEquippedSkin();
       DailyReminder.reschedule(loggedToday: context.read<AppState>().loggedDeedToday);
     }
+  }
+
+  void _retryStartup() {
+    setState(() {
+      _startupFailed = false;
+      _startupAttempt++; // fresh loading screen (dots, 5 s "slow" line) for the new attempt
+    });
+    _checkExistingSession();
+  }
+
+  void _disposeStartupLoader() {
+    _startupLoader?.dispose();
+    _startupLoader = null;
   }
 
   @override
@@ -241,7 +287,11 @@ class _RootScreenState extends State<RootScreen> with WidgetsBindingObserver {
       case RootScreenState.checkingSession:
         // Guddi instead of a spinner. A saved session means a returning user; without one this
         // state is left almost immediately for Login, so firstOpen is rarely on screen.
-        return GuddiLoading(returning: Supabase.instance.client.auth.currentSession != null);
+        return GuddiLoading(
+          key: ValueKey(_startupAttempt),
+          returning: Supabase.instance.client.auth.currentSession != null,
+          onRetry: _startupFailed ? _retryStartup : null,
+        );
       case RootScreenState.login:
         return LoginScreen(
           onCodeSent: (email) => setState(() {

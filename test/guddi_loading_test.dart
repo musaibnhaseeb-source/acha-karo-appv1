@@ -71,6 +71,19 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
+  testWidgets('offline state: offline line, no dots, Retry calls back', (tester) async {
+    ignoreFontErrors();
+    var retries = 0;
+    await tester.pumpWidget(_host(GuddiLoading(returning: true, onRetry: () => retries++)));
+    expect(find.byKey(const ValueKey('guddi-loading-line')), findsNothing);
+    expect(find.text(GuddiLoadingLines.offline.roman), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('guddi-offline-retry')));
+    expect(retries, 1);
+    await tester.pump(const Duration(seconds: 5)); // no "slow" swap in the offline state
+    expect(find.text(GuddiLoadingLines.offline.roman), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+  });
+
   for (final size in const [Size(320, 568), Size(412, 915)]) {
     testWidgets('no overflow at ${size.width.toInt()}x${size.height.toInt()} @1.15x', (tester) async {
       ignoreFontErrors();

@@ -42,6 +42,13 @@ class GuddiLoadingLines {
   static const firstOpen = GuddiLine('Hi! Main Guddi, sab ready kar rahi hoon');
   // Swapped in if loading takes longer than about 5 seconds.
   static const slow = GuddiLine('Thora aur wait, Guddi bas aa hi rahi hai');
+
+  // Offline state (load failed or timed out) and its button.
+  // PLACEHOLDER COPY: Marketing is writing these two, Musa picks. Replace both, then set
+  // offlineIsPlaceholder to false (the release string check looks for it).
+  static const offlineIsPlaceholder = true;
+  static const offline = GuddiLine('Internet nahi mil raha', "Can't connect right now. Check your internet and try again.");
+  static const retry = 'Try again';
 }
 
 // Celebration captions (Guddi in the tier-up / big-milestone animations).

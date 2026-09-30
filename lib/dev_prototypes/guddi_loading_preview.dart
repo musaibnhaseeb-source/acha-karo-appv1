@@ -6,7 +6,7 @@ import '../widgets/guddi_loading.dart';
 
 // DEV-ONLY preview of the cold-start Guddi loader: its own entry point, never imported by the app.
 //   flutter run -d chrome -t lib/dev_prototypes/guddi_loading_preview.dart
-// 360-dp panels: each line at 1.0, and the two longest at the app's A+ (1.15) and 1.3. No Supabase, no data.
+// 360-dp panels: each line at 1.0, the two longest at A+ (1.15), slow at A- (0.9), and offline. No Supabase, no data.
 
 void main() => runApp(MaterialApp(
       debugShowCheckedModeBanner: false,
@@ -19,10 +19,13 @@ void main() => runApp(MaterialApp(
           _Phone(label: 'slow 1.0', child: GuddiLoading(returning: true, slowAfter: Duration.zero)),
           _Phone(label: 'first open 1.15', scale: 1.15, child: GuddiLoading(returning: false, slowAfter: Duration(days: 1))),
           _Phone(label: 'slow 1.15 (A+)', scale: 1.15, child: GuddiLoading(returning: true, slowAfter: Duration.zero)),
-          _Phone(label: 'slow 1.3', scale: 1.3, child: GuddiLoading(returning: true, slowAfter: Duration.zero)),
+          _Phone(label: 'slow 0.9 (A-)', scale: 0.9, child: GuddiLoading(returning: true, slowAfter: Duration.zero)),
+          _Phone(label: 'offline 1.0', child: GuddiLoading(returning: true, onRetry: _noop)),
         ]),
       ),
     ));
+
+void _noop() {}
 
 class _Phone extends StatelessWidget {
   final Widget child;

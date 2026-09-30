@@ -8,10 +8,12 @@ import 'guddi_home.dart';
 // animated dots, in place of a spinner. After [slowAfter] the line switches to the "taking a
 // while" one. With reduced motion (system "remove animations") the dots stay static. Lines live
 // in data/guddi_content.dart (GuddiLoadingLines). Presentation only: reads and writes nothing.
+// With [onRetry] set it shows the offline state instead (M1): no dots, a Retry button.
 class GuddiLoading extends StatefulWidget {
   final bool returning; // signed in (saved session) vs first open / signed out
   final Duration slowAfter;
-  const GuddiLoading({super.key, required this.returning, this.slowAfter = const Duration(seconds: 5)});
+  final VoidCallback? onRetry; // non-null = the load failed; show the offline state
+  const GuddiLoading({super.key, required this.returning, this.slowAfter = const Duration(seconds: 5), this.onRetry});
   @override
   State<GuddiLoading> createState() => _GuddiLoadingState();
 }
@@ -41,7 +43,7 @@ class _GuddiLoadingState extends State<GuddiLoading> {
       _dots = 3;
     } else {
       _dotsTimer ??= Timer.periodic(const Duration(milliseconds: 450), (_) {
-        if (mounted) setState(() => _dots = _dots % 3 + 1);
+        if (mounted && widget.onRetry == null) setState(() => _dots = _dots % 3 + 1);
       });
     }
   }
@@ -55,11 +57,12 @@ class _GuddiLoadingState extends State<GuddiLoading> {
 
   @override
   Widget build(BuildContext context) {
+    if (widget.onRetry != null) return _offline(widget.onRetry!);
     final line = _slow ? GuddiLoadingLines.slow : (widget.returning ? GuddiLoadingLines.returning : GuddiLoadingLines.firstOpen);
-    final style = AppFonts.fraunces(size: 17, weight: FontWeight.w600, height: 1.35);
+    final style = AppFonts.fraunces(size: 15, weight: FontWeight.w600, height: 1.35);
     return Center(
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 32),
+        padding: const EdgeInsets.symmetric(horizontal: 16),
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           Image.asset(GuddiPoses.smile, height: 150, fit: BoxFit.contain),
           const SizedBox(height: 18),
@@ -85,6 +88,40 @@ class _GuddiLoadingState extends State<GuddiLoading> {
             const SizedBox(height: 6),
             Text(line.en!, textAlign: TextAlign.center, style: AppFonts.inter(size: 12.5, color: AppColors.textSoft, height: 1.4)),
           ],
+        ]),
+      ),
+    );
+  }
+
+  Widget _offline(VoidCallback onRetry) {
+    const line = GuddiLoadingLines.offline;
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Image.asset(GuddiPoses.worried, height: 150, fit: BoxFit.contain),
+          const SizedBox(height: 18),
+          Semantics(
+            liveRegion: true,
+            child: Text(line.roman, key: const ValueKey('guddi-offline-line'), textAlign: TextAlign.center, style: AppFonts.fraunces(size: 15, weight: FontWeight.w600, height: 1.35)),
+          ),
+          if (line.en != null) ...[
+            const SizedBox(height: 6),
+            Text(line.en!, textAlign: TextAlign.center, style: AppFonts.inter(size: 12.5, color: AppColors.textSoft, height: 1.4)),
+          ],
+          const SizedBox(height: 18),
+          GestureDetector(
+            key: const ValueKey('guddi-offline-retry'),
+            onTap: onRetry,
+            child: Semantics(
+              button: true,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 12),
+                decoration: BoxDecoration(color: AppColors.gold, borderRadius: BorderRadius.circular(14)),
+                child: Text(GuddiLoadingLines.retry, style: AppFonts.inter(size: 14, weight: FontWeight.w700, color: AppColors.inkOnGold)),
+              ),
+            ),
+          ),
         ]),
       ),
     );
