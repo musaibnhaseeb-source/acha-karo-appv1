@@ -43,12 +43,10 @@ class GuddiLoadingLines {
   // Swapped in if loading takes longer than about 5 seconds.
   static const slow = GuddiLine('Thora aur wait, Guddi bas aa hi rahi hai');
 
-  // Offline state (load failed or timed out) and its button.
-  // PLACEHOLDER COPY: Marketing is writing these two, Musa picks. Replace both, then set
-  // offlineIsPlaceholder to false (the release string check looks for it).
-  static const offlineIsPlaceholder = true;
-  static const offline = GuddiLine('Internet nahi mil raha', "Can't connect right now. Check your internet and try again.");
-  static const retry = 'Try again';
+  // Offline state (load failed or timed out) and its button. Approved copy (Musa, 2026-09-30).
+  // One line, no English subtitle and no dots, matching the other loading states.
+  static const offline = GuddiLine('Lagta hai internet off hai');
+  static const retry = 'Dobara try karo';
 }
 
 // Celebration captions (Guddi in the tier-up / big-milestone animations).

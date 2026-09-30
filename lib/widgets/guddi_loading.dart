@@ -99,16 +99,23 @@ class _GuddiLoadingState extends State<GuddiLoading> {
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16),
         child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Image.asset(GuddiPoses.worried, height: 150, fit: BoxFit.contain),
+          // The worried pose is a bust crop cut flat at the bottom edge, which reads as a box on
+          // the dark wallpaper; fading its lower part out blends it in like the other poses.
+          ShaderMask(
+            blendMode: BlendMode.dstIn,
+            shaderCallback: (rect) => const LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [Colors.white, Colors.white, Colors.transparent],
+              stops: [0, 0.6, 1],
+            ).createShader(rect),
+            child: Image.asset(GuddiPoses.worried, height: 150, fit: BoxFit.contain),
+          ),
           const SizedBox(height: 18),
           Semantics(
             liveRegion: true,
             child: Text(line.roman, key: const ValueKey('guddi-offline-line'), textAlign: TextAlign.center, style: AppFonts.fraunces(size: 15, weight: FontWeight.w600, height: 1.35)),
           ),
-          if (line.en != null) ...[
-            const SizedBox(height: 6),
-            Text(line.en!, textAlign: TextAlign.center, style: AppFonts.inter(size: 12.5, color: AppColors.textSoft, height: 1.4)),
-          ],
           const SizedBox(height: 18),
           GestureDetector(
             key: const ValueKey('guddi-offline-retry'),

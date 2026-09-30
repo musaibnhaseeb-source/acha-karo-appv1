@@ -19,7 +19,6 @@ void main() => runApp(MaterialApp(
           _Phone(label: 'slow 1.0', child: GuddiLoading(returning: true, slowAfter: Duration.zero)),
           _Phone(label: 'first open 1.15', scale: 1.15, child: GuddiLoading(returning: false, slowAfter: Duration(days: 1))),
           _Phone(label: 'slow 1.15 (A+)', scale: 1.15, child: GuddiLoading(returning: true, slowAfter: Duration.zero)),
-          _Phone(label: 'slow 0.9 (A-)', scale: 0.9, child: GuddiLoading(returning: true, slowAfter: Duration.zero)),
           _Phone(label: 'offline 1.0', child: GuddiLoading(returning: true, onRetry: _noop)),
         ]),
       ),
