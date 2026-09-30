@@ -7,6 +7,11 @@
 <!-- Lets the daily Guddi reminder be rescheduled after the phone restarts (flutter_local_notifications).
      Reminders use inexact scheduling, so no exact-alarm permission is requested. -->
 <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+<!-- CAMERA and location permissions otherwise imply these features are required, hiding the app
+     on Play from devices without them. Neither is required: photos can come from the gallery and
+     deeds can be submitted without location. -->
+<uses-feature android:name="android.hardware.camera" android:required="false" />
+<uses-feature android:name="android.hardware.location" android:required="false" />
     <application
         android:label="Acha Karo"
         android:name="${applicationName}"
