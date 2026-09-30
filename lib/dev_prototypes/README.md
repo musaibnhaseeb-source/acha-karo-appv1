@@ -12,3 +12,4 @@ shipped code; if something here is ever revived, move it back out and review it 
 | `edit_profile_screen.dart` | Older full-screen Edit Profile, superseded by `widgets/edit_profile_sheet.dart`. |
 | `hero_band.dart`, `monuments.dart` | Scrolling monuments banner, not used on any screen. |
 | `past_winners.dart` | Static sample "past winners" data. |
+| `guddi_loading_preview.dart` | Dev preview of the cold-start Guddi loader (each line at 360 dp, several text scales). Own entry point, not imported. |

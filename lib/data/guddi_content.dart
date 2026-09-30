@@ -31,6 +31,19 @@ class GuddiLines {
   static const doneNight = GuddiLine('Aaj ka acha kaam ho gaya. Aaram se soyein 🌙', "Today's acha kaam is done. Rest well.");
 }
 
+// Cold-start loading screen (widgets/guddi_loading.dart), shown while the app loads the session
+// and profile.
+// Approved copy (Musa, 2026-09-30). No trailing "..." or full stop: the widget adds the
+// animated dots itself. Each line mixes Roman Urdu and English, so there's no separate subtitle.
+class GuddiLoadingLines {
+  // Signed in (a saved session exists).
+  static const returning = GuddiLine('Welcome back! Guddi aa rahi hai');
+  // No saved session (first open, or signed out).
+  static const firstOpen = GuddiLine('Hi! Main Guddi, sab ready kar rahi hoon');
+  // Swapped in if loading takes longer than about 5 seconds.
+  static const slow = GuddiLine('Thora aur wait, Guddi bas aa hi rahi hai');
+}
+
 // Celebration captions (Guddi in the tier-up / big-milestone animations).
 class GuddiCelebrationLines {
   static const strong = GuddiLine('Aap aur mazboot ho rahe hain 💪', "You're getting stronger.");

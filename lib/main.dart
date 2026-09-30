@@ -14,6 +14,7 @@ import 'widgets/animated_wallpaper.dart';
 import 'utils/notifications.dart';
 import 'utils/daily_reminder.dart';
 import 'widgets/update_available_dialog.dart';
+import 'widgets/guddi_loading.dart';
 import 'supabase_config.dart';
 
 // App entry point — connects to Supabase (all real data lives there, read/written via AppState),
@@ -238,7 +239,9 @@ class _RootScreenState extends State<RootScreen> with WidgetsBindingObserver {
   Widget _buildBody(BuildContext context) {
     switch (screen) {
       case RootScreenState.checkingSession:
-        return const Center(child: CircularProgressIndicator(color: AppColors.gold));
+        // Guddi instead of a spinner. A saved session means a returning user; without one this
+        // state is left almost immediately for Login, so firstOpen is rarely on screen.
+        return GuddiLoading(returning: Supabase.instance.client.auth.currentSession != null);
       case RootScreenState.login:
         return LoginScreen(
           onCodeSent: (email) => setState(() {
