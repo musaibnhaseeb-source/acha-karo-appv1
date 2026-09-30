@@ -65,8 +65,8 @@ class _LocationDisclosureDialog extends StatelessWidget {
               "Your phone's approximate location (about 100 m) at the moment you submit, saved with this acha kaam. Only when you submit, never in the background."),
           _point('Why', 'It helps a moderator check that the acha kaam really happened.'),
           _point('Who can see it',
-              // UNCONFIRMED: depends on the live deeds RLS (only the owner and moderators can select
-              // gps_lat/gps_lng). Pending confirmation via the Supervisor/Musa.
+              // Confirmed against live policies (2026-09-30, via Supervisor): deeds, moderation_queue
+              // and deed-photos are readable only by the owner and profiles.role moderator/owner.
               "Only you and Acha Karo moderators. It isn't shown on your profile, on leaderboards or to friends."),
           _point(
             'If you say no',
