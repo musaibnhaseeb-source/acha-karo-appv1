@@ -36,6 +36,11 @@ class _SubmitDeedModalState extends State<SubmitDeedModal> {
   final Map<String, String> details = {};
   bool submitting = false;
   bool sharingLocation = false; // drives the "Capturing location…" line
+  // v1.3.2 duplicate photo: the last photo was already used on one of this user's deeds.
+  // duplicateShown drives Guddi's message until a new photo is picked; afterDuplicate sticks for
+  // the rest of this form, so the next submission always goes to a moderator.
+  bool duplicateShown = false;
+  bool afterDuplicate = false;
 
   Future<void> _pickPhoto() async {
     final picker = ImagePicker();
@@ -64,7 +69,7 @@ class _SubmitDeedModalState extends State<SubmitDeedModal> {
     );
     if (picked != null) {
       final bytes = await picked.readAsBytes();
-      if (mounted) setState(() { photoBytes = bytes; photoFileName = picked.name; });
+      if (mounted) setState(() { photoBytes = bytes; photoFileName = picked.name; duplicateShown = false; });
     }
   }
 
@@ -75,8 +80,20 @@ class _SubmitDeedModalState extends State<SubmitDeedModal> {
     if (share == null || !mounted) return;
     setState(() { submitting = true; sharingLocation = share; });
     final appState = context.read<AppState>();
-    final result = await appState.submitPhotoDeed(widget.type, details, photoBytes: photoBytes, photoFileName: photoFileName, campaignId: widget.campaignId, shareLocation: share);
-    if (mounted) Navigator.of(context).pop(result);
+    final result = await appState.submitPhotoDeed(widget.type, details, photoBytes: photoBytes, photoFileName: photoFileName, campaignId: widget.campaignId, shareLocation: share, afterDuplicate: afterDuplicate);
+    if (!mounted) return;
+    if (result.duplicatePhoto) {
+      // Nothing was saved. Keep the form open, drop the photo and ask for a new one.
+      setState(() {
+        submitting = false;
+        photoBytes = null;
+        photoFileName = null;
+        duplicateShown = true;
+        afterDuplicate = true;
+      });
+      return;
+    }
+    Navigator.of(context).pop(result);
   }
 
   @override
@@ -169,6 +186,19 @@ class _SubmitDeedModalState extends State<SubmitDeedModal> {
                     ]),
                   ),
                 ],
+                if (duplicateShown) ...[
+                  const SizedBox(height: 12),
+                  _GuddiNote(
+                    key: const ValueKey('duplicate-photo-note'),
+                    pose: GuddiPoses.worried,
+                    text: GuddiDuplicatePhotoLines.rejected.roman,
+                    action: TextButton(
+                      key: const ValueKey('duplicate-new-photo'),
+                      onPressed: _pickPhoto,
+                      child: Text(GuddiDuplicatePhotoLines.newPhotoButton, style: AppFonts.inter(size: 12.5, weight: FontWeight.w700, color: AppColors.gold)),
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 10),
                 Text(
                   'Any image deemed inappropriate or harassing may result in your account being flagged for moderator review.',
@@ -198,6 +228,15 @@ class _SubmitDeedModalState extends State<SubmitDeedModal> {
                   ),
                 ],
 
+                // After a duplicate, the new photo always goes to a moderator: say so before submitting.
+                if (afterDuplicate && !duplicateShown) ...[
+                  const SizedBox(height: 14),
+                  _GuddiNote(
+                    key: const ValueKey('will-be-reviewed-note'),
+                    pose: GuddiPoses.explain,
+                    text: GuddiDuplicatePhotoLines.willBeReviewed.roman,
+                  ),
+                ],
                 const SizedBox(height: 18),
                 GestureDetector(
                   onTap: valid ? _handleSubmit : null,
@@ -221,6 +260,29 @@ class _SubmitDeedModalState extends State<SubmitDeedModal> {
           ),
         );
       },
+    );
+  }
+}
+
+// Small Guddi message card inside the form (duplicate photo / "will be reviewed").
+class _GuddiNote extends StatelessWidget {
+  final String pose;
+  final String text;
+  final Widget? action;
+  const _GuddiNote({super.key, required this.pose, required this.text, this.action});
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(6, 6, 12, 6),
+      decoration: BoxDecoration(color: AppColors.oliveCard, borderRadius: BorderRadius.circular(12)),
+      child: Row(children: [
+        Image.asset(pose, height: 48, fit: BoxFit.contain),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Semantics(liveRegion: true, child: Text(text, style: AppFonts.inter(size: 12, weight: FontWeight.w600, height: 1.35))),
+        ),
+        if (action != null) action!,
+      ]),
     );
   }
 }

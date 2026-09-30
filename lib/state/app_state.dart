@@ -11,7 +11,7 @@ import '../data/tiers.dart';
 import '../utils/notifications.dart';
 import '../data/remote_config.dart';
 import '../utils/app_version.dart';
-import '../utils/image_metadata.dart';
+import '../utils/deed_photo_upload.dart';
 
 const Duration cooldownDuration = Duration(hours: 1); // same 1hr cooldown as the original
 
@@ -75,7 +75,30 @@ class SubmitResult {
   final TierDef? leveledUpTier;
   final List<int> newMilestones;
   final bool blockedByCooldown; // new — see submitPhotoDeed for why this needed a real, data-layer check
-  const SubmitResult({required this.flagged, required this.leveledUpTier, required this.newMilestones, this.blockedByCooldown = false});
+  // v1.3.2: the photo was already used on one of this user's deeds. Nothing was saved; the submit
+  // form stays open so they can take a new photo.
+  final bool duplicatePhoto;
+  const SubmitResult({required this.flagged, required this.leveledUpTier, required this.newMilestones, this.blockedByCooldown = false, this.duplicatePhoto = false});
+}
+
+// Why a submission goes to a moderator instead of being approved straight away. These strings
+// are stored in moderation_queue.reason and read by moderators.
+List<String> deedModerationReasons({
+  required bool repeat,
+  required bool shareLocation,
+  required bool gpsFailed,
+  required bool isDonation,
+  required bool afterDuplicate,
+}) {
+  return [
+    if (repeat) 'Same deed type logged 3+ times today — repetition guard triggered.',
+    if (!shareLocation)
+      'Submitter chose not to share location.'
+    else if (gpsFailed)
+      'GPS location could not be captured at submission.',
+    if (isDonation) 'Donation-category submission — always reviewed by a moderator.',
+    if (afterDuplicate) 'Resubmitted after a duplicate photo was rejected.',
+  ];
 }
 
 // In-app notifications, loaded from the real notifications table (e.g. deed approved/rejected by
@@ -995,19 +1018,26 @@ class AppState extends ChangeNotifier {
   // Metadata (EXIF GPS, XMP...) is stripped first — see image_metadata.dart. If the photo can't
   // be cleaned, nothing is uploaded rather than the original. The extension (and so the stored
   // content type) comes from the cleaned bytes, not the picked file name.
-  Future<String?> _uploadDeedPhoto(String uid, Uint8List photoBytes) async {
+  // v1.3.2: named by content hash, so re-uploading a photo this user already used comes back as
+  // a duplicate (see deed_photo_upload.dart). Any other failure is best-effort as before.
+  Future<PhotoUploadResult> _uploadDeedPhoto(String uid, Uint8List photoBytes) async {
+    final client = Supabase.instance.client;
     try {
-      final clean = await stripImageMetadata(photoBytes);
-      if (clean == null) return null;
-      final path = '$uid/${DateTime.now().millisecondsSinceEpoch}.${clean.extension}';
-      await Supabase.instance.client.storage.from('deed-photos').uploadBinary(path, clean.bytes);
-      return path;
+      return await uploadDeedPhoto(
+        uid: uid,
+        photoBytes: photoBytes,
+        upload: (path, bytes) => client.storage.from('deed-photos').uploadBinary(path, bytes, fileOptions: const FileOptions(upsert: false)),
+        deedUsesPhoto: (path) async {
+          final rows = await client.from('deeds').select('id').eq('user_id', uid).eq('photo_url', path).limit(1);
+          return rows.isNotEmpty;
+        },
+      );
     } catch (_) {
-      return null; // best-effort, same "don't block the person" reasoning as the other writes
+      return const PhotoUploadResult(PhotoUploadStatus.failed);
     }
   }
 
-  Future<SubmitResult> submitPhotoDeed(String type, Map<String, String> details, {Uint8List? photoBytes, String? photoFileName, String? campaignId, bool shareLocation = true}) async {
+  Future<SubmitResult> submitPhotoDeed(String type, Map<String, String> details, {Uint8List? photoBytes, String? photoFileName, String? campaignId, bool shareLocation = true, bool afterDuplicate = false}) async {
     final meta = deedCatalog[type];
     if (meta == null) return SubmitResult(flagged: false, leveledUpTier: null, newMilestones: []);
 
@@ -1029,28 +1059,39 @@ class AppState extends ChangeNotifier {
       return SubmitResult(flagged: false, leveledUpTier: null, newMilestones: [], blockedByCooldown: true);
     }
 
+    // Photo first (v1.3.2): a duplicate photo is rejected before anything else happens — no deed,
+    // no cooldown, no GPS prompt — and the form stays open for a new photo.
+    final uid = Supabase.instance.client.auth.currentUser?.id;
+    String? photoPath;
+    if (uid != null && photoBytes != null) {
+      final upload = await _uploadDeedPhoto(uid, photoBytes);
+      if (upload.status == PhotoUploadStatus.duplicate) {
+        return const SubmitResult(flagged: false, leveledUpTier: null, newMilestones: [], duplicatePhoto: true);
+      }
+      photoPath = upload.path; // null on any other failure: the deed is still created, as before
+    }
+
     // shareLocation is the person's answer to the location disclosure (location_disclosure.dart).
     // Saying no skips GPS entirely (no OS prompt) and takes the same moderated path as a GPS failure.
     final position = shareLocation ? await _attemptGpsCapture() : null;
     final gpsFailed = position == null;
     final repeatFlag = countTodayByType(type) >= 2;
     final isDonation = donationDeedTypes.contains(type);
-    final willFlag = repeatFlag || gpsFailed || isDonation;
+    // afterDuplicate: this form already had a duplicate photo rejected, so the new one always goes
+    // to a moderator.
+    final willFlag = repeatFlag || gpsFailed || isDonation || afterDuplicate;
     final awardedPoints = meta.points;
-    final uid = Supabase.instance.client.auth.currentUser?.id;
-    final photoPath = (uid != null && photoBytes != null) ? await _uploadDeedPhoto(uid, photoBytes) : null;
 
     if (willFlag) {
       lastLoggedAt[type] = DateTime.now(); // cooldown must start here too — a flagged/pending
       // submission still "used up" this deed type for the hour, same as an approved one.
-      final reasons = <String>[];
-      if (repeatFlag) reasons.add('Same deed type logged 3+ times today — repetition guard triggered.');
-      if (!shareLocation) {
-        reasons.add('Submitter chose not to share location.');
-      } else if (gpsFailed) {
-        reasons.add('GPS location could not be captured at submission.');
-      }
-      if (isDonation) reasons.add('Donation-category submission — always reviewed by a moderator.');
+      final reasons = deedModerationReasons(
+        repeat: repeatFlag,
+        shareLocation: shareLocation,
+        gpsFailed: gpsFailed,
+        isDonation: isDonation,
+        afterDuplicate: afterDuplicate,
+      );
       final evidence = details.entries.where((e) => e.value.isNotEmpty).map((e) => '${e.key}: ${e.value}').join(' · ');
       final reasonText = reasons.join(' ');
 

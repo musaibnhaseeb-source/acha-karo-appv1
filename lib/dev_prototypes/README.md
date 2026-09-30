@@ -13,3 +13,4 @@ shipped code; if something here is ever revived, move it back out and review it 
 | `hero_band.dart`, `monuments.dart` | Scrolling monuments banner, not used on any screen. |
 | `past_winners.dart` | Static sample "past winners" data. |
 | `guddi_loading_preview.dart` | Dev preview of the cold-start Guddi loader (each line at 360 dp, several text scales). Own entry point, not imported. |
+| `dup_hash_probe.dart` | Dev probe for v1.3.2: picks a gallery photo with the app's picker settings and logs the cleaned-bytes SHA-256, to check the resize is deterministic. Own entry point, not imported. |

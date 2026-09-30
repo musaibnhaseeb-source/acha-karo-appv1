@@ -49,6 +49,15 @@ class GuddiLoadingLines {
   static const retry = 'Dobara try karo';
 }
 
+// Duplicate photo (v1.3.2, submit form): the photo was already used on one of this user's deeds.
+// Approved copy (Musa, 2026-09-30).
+class GuddiDuplicatePhotoLines {
+  static const rejected = GuddiLine('Oho! Yeh photo pehle bhi upload ho chuki hai. Koi baat nahi, nayi photo lo.');
+  static const newPhotoButton = 'New photo';
+  // Shown before resubmitting with a new photo: it will go to a moderator.
+  static const willBeReviewed = GuddiLine('Yeh acha kaam ab hamari team check karegi');
+}
+
 // Celebration captions (Guddi in the tier-up / big-milestone animations).
 class GuddiCelebrationLines {
   static const strong = GuddiLine('Aap aur mazboot ho rahe hain 💪', "You're getting stronger.");

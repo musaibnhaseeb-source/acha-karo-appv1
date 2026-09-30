@@ -34,11 +34,13 @@ dependencies:
                                         # dev_dependencies, which recent Flutter strips from release builds
                                         # (so notifications were silently dead in release APKs).
   timezone: ^0.9.4          # scheduled-notification dates (already pulled in by flutter_local_notifications)
+  crypto: ^3.0.0              # SHA-256 of cleaned deed photos: duplicate-photo check (already a transitive dependency)
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^4.0.0
+  image_picker_platform_interface: ^2.11.1  # tests only: fake picker for the submit-form widget test
   flutter_launcher_icons: ^0.13.1  # generates every required icon size from one image you provide
   flutter_native_splash: ^2.4.1    # generates the real native launch screen (background color +
                                      # logo) from the config below — replaces Flutter's default
