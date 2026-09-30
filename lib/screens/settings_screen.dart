@@ -45,7 +45,7 @@ class SettingsScreen extends StatelessWidget {
         title: Text('Delete account', style: AppFonts.fraunces(size: 16, weight: FontWeight.w600)),
         content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(
-            "This submits a request to our team — your account isn't deleted immediately, and we'll action it within 24 hours. Let us know why you're leaving, if you're willing to share.",
+            "This submits a request to our team — your account isn't deleted immediately. We'll delete it within 30 days, along with your acha kaam, photos and locations. Let us know why you're leaving, if you're willing to share.",
             style: AppFonts.inter(size: 12, color: AppColors.textSoft, height: 1.4),
           ),
           const SizedBox(height: 14),
@@ -73,7 +73,7 @@ class SettingsScreen extends StatelessWidget {
               if (!ctx.mounted) return;
               Navigator.of(ctx).pop();
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text(error ?? "Request submitted — we'll action this within 24 hours."), duration: const Duration(seconds: 5)),
+                SnackBar(content: Text(error ?? "Request submitted — your account will be deleted within 30 days."), duration: const Duration(seconds: 5)),
               );
             },
             child: Text('Submit request', style: AppFonts.inter(size: 13, weight: FontWeight.w700, color: const Color(0xFFE39B84))),
