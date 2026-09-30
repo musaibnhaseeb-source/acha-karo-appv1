@@ -14,8 +14,9 @@ class _Section {
   const _Section(this.heading, {this.paragraphs = const [], this.bullets = const []});
 }
 
-// "Last updated" = v1.3 launch date, confirmed by the Supervisor for the final build (keep in sync with the website Terms).
-const _lastUpdated = '25 September 2026';
+// "Last updated" = date of the latest Terms change (v1.3.1: optional location, NGO totals wording,
+// review time; approved by Musa 2026-09-30). Keep in sync with the website Terms.
+const _lastUpdated = '30 September 2026';
 const kHelpContactUrl = 'https://achakaro.vercel.app/help.html#contact';
 
 const List<_Section> _sections = [
@@ -34,8 +35,8 @@ const List<_Section> _sections = [
   _Section('4. Your acha kaam submissions', bullets: [
     'Only submit acha kaam you really did, with photos you took yourself.',
     "Photograph the acha kaam, not the person. Never show a child's face, and don't show anyone's private details.",
-    "By submitting, you let Acha Karo store your photo and its location so we can check it. We'll only post your photo on social media with your permission.",
-    'Most acha kaam are approved automatically. Some are checked by our team, usually within 48 hours. We can review, approve or reject any acha kaam, and our decision is final.',
+    "By submitting, you let Acha Karo store your photo so we can check it. Sharing your location is optional: we ask before each acha kaam, it's approximate (about 100 m), and only you and our moderators can see it. We'll only post your photo on social media with your permission.",
+    "Most acha kaam are approved automatically. Some are checked by our team, usually within 48 hours; when it's busy it can take up to 2 more days. We can review, approve or reject any acha kaam, and our decision is final.",
   ]),
   _Section("5. What's not allowed", paragraphs: [
     'Fake, copied or repeated submissions; multiple accounts; gaming the leaderboard; harassing other users; anything illegal, hateful or sexual; tampering with the app or pretending to be Acha Karo. We can suspend or remove accounts that break these rules.',
@@ -43,7 +44,7 @@ const List<_Section> _sections = [
   _Section('6. Your data', bullets: [
     'We collect only what the app needs (see Privacy on our Help page).',
     'Other users see your first name and last initial, city, points and badge count. A nickname is fine.',
-    'We may use acha kaam locations to find areas that need help, and share area-level summaries with partner NGOs. We never share your name, your profile or your exact location.',
+    'We may share anonymous, area-level totals with partner organisations such as NGOs — for example, how many acha kaam were done in a neighbourhood. This never includes names, emails, phone numbers, photos or exact locations, and an area is only included when at least 5 different members were active there.',
     "We don't sell your data or show ads.",
     'If you delete your account, we delete it within 30 days, along with your acha kaam, photos and locations.',
     'We keep contact form messages for 3 months.',
@@ -72,10 +73,11 @@ const List<_Section> _sections = [
 const List<String> _urduSummary = [
   'اچھا کرو ایک مفت ایپ ہے۔ اچھا کام کریں، تصویر لیں، اور پوائنٹس اور بیجز حاصل کیجیے۔ عمر 14 سال یا اس سے زیادہ، ایک شخص ایک اکاؤنٹ۔ اگر آپ کی عمر 18 سال سے کم ہے تو براہِ کرم اچھا کرو اپنے والدین یا سرپرست کے علم میں رکھ کر استعمال کیجیے۔',
   'پوائنٹس صرف ایپ کے اندر ہیں۔ ان کی کوئی نقد قیمت نہیں، اور کچھ خریدنے کی ضرورت نہیں۔',
-  'زیادہ تر اچھے کام فوراً منظور ہو جاتے ہیں۔ کچھ ہماری ٹیم چیک کرتی ہے، عموماً 48 گھنٹوں کے اندر۔',
+  'زیادہ تر اچھے کام فوراً منظور ہو جاتے ہیں۔ کچھ ہماری ٹیم چیک کرتی ہے، عموماً 48 گھنٹوں کے اندر؛ زیادہ رش ہو تو 2 دن مزید لگ سکتے ہیں۔',
   'آپ کا درجہ (چوزہ سے شاہین تک) بیجز کی تعداد سے طے ہوتا ہے۔',
   'دوسرے صارفین آپ کا پہلا نام اور آخری نام کا پہلا حرف، شہر، پوائنٹس اور بیجز دیکھ سکتے ہیں۔ آپ فرضی نام بھی استعمال کر سکتے ہیں۔',
-  'اچھے کام کی تصویر اور لوکیشن صرف ہماری ٹیم دیکھتی ہے۔ ہم مدد کی ضرورت والے علاقے ڈھونڈنے کے لیے لوکیشنز استعمال کر سکتے ہیں اور پارٹنر این جی اوز کے ساتھ صرف علاقے کی سطح کا خلاصہ شیئر کر سکتے ہیں، کبھی آپ کا نام، پروفائل یا درست لوکیشن نہیں۔',
+  'اچھے کام کی تصویر صرف آپ اور ہماری ٹیم دیکھتی ہے۔ لوکیشن شیئر کرنا آپ کی مرضی ہے: ہر اچھے کام سے پہلے پوچھا جاتا ہے، یہ تقریباً 100 میٹر تک درست ہوتی ہے، اور اسے صرف آپ اور ہمارے ماڈریٹرز دیکھ سکتے ہیں۔',
+  'ہم پارٹنر اداروں، جیسے این جی اوز، کے ساتھ علاقے کی سطح کے گمنام اعداد و شمار شیئر کر سکتے ہیں، مثلاً کسی محلے میں کتنے اچھے کام ہوئے۔ اس میں کبھی نام، ای میل، فون نمبر، تصویریں یا درست لوکیشن شامل نہیں ہوتی، اور کوئی علاقہ صرف تب شامل ہوتا ہے جب وہاں کم از کم 5 مختلف ممبرز ایکٹو رہے ہوں۔',
   'آپ کی تصویر سوشل میڈیا پر صرف آپ کی اجازت سے لگائی جائے گی۔',
   'اکاؤنٹ ڈیلیٹ کرنے کے لیے: ایپ میں Settings ← Delete account۔ 30 دن کے اندر اکاؤنٹ، اچھے کام، تصویریں اور لوکیشنز سب ڈیلیٹ کر دیے جاتے ہیں۔',
   'رابطہ فارم کے پیغامات 3 ماہ تک رکھے جاتے ہیں۔',
