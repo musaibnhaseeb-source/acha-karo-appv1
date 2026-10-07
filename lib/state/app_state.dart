@@ -19,6 +19,7 @@ import 'deed_queue.dart';
 import '../utils/network_errors.dart';
 import 'package:path_provider/path_provider.dart';
 import '../data/guddi_content.dart';
+import '../utils/points_notifier.dart';
 
 const Duration cooldownDuration = Duration(hours: 1); // same 1hr cooldown as the original
 
@@ -1689,7 +1690,6 @@ class AppState extends ChangeNotifier {
     try {
       final notifRows = await Supabase.instance.client.from('notifications').select().eq('user_id', uid).order('created_at', ascending: false).limit(50);
       if (Supabase.instance.client.auth.currentUser?.id != uid) return;
-      final previousIds = notifications.map((n) => n.id).toSet();
       final loaded = notifRows.map<AppNotification>((n) => AppNotification(
             id: n['id'] as String,
             type: n['type'] as String,
@@ -1698,17 +1698,12 @@ class AppState extends ChangeNotifier {
             day: simDay,
             read: n['read'] as bool? ?? false,
           )).toList();
-      // Real system notification (with sound) for anything genuinely new since the last load.
-      // Guarded by previousIds being non-empty so the first load of existing history doesn't
-      // fire one for every old notification.
-      if (previousIds.isNotEmpty) {
-        for (final n in loaded) {
-          if (!previousIds.contains(n.id)) {
-            showLocalNotification(title: n.title, body: n.body);
-          }
-        }
-      }
       notifications = loaded;
+      // Phone notifications ("+X points credited" etc.) for unread rows newer than this account's
+      // marker — on every load, cold start included. See points_notifier.dart.
+      for (final n in await PointsNotifier.process(uid, notifRows)) {
+        showLocalNotification(title: n.title, body: n.body);
+      }
     } catch (_) {
       // Doesn't block anything — same reasoning as above.
     }
@@ -1900,6 +1895,9 @@ class AppState extends ChangeNotifier {
         user.streak += 1;
         user.lastLogDay = simDay;
       }
+      // Same "+X points credited" phone notification as a moderator approval.
+      final n = approvedNotification(deedName: deedCatalog[d.type]?.name, points: pts);
+      showLocalNotification(title: n.title, body: n.body);
     }
   }
 
@@ -1992,6 +1990,7 @@ class AppState extends ChangeNotifier {
     try {
       await homeCache.clear();
     } catch (_) {}
+    await PointsNotifier.clearAll();
   }
 
   // Called once, right after Profile Setup completes for a brand-new user — creates their row
