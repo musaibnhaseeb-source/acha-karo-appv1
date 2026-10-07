@@ -5,7 +5,6 @@ import '../state/app_state.dart';
 import '../data/badges.dart';
 import '../widgets/edit_profile_sheet.dart';
 import '../widgets/home_side_sheet.dart';
-import '../widgets/animated_wallpaper.dart';
 import '../widgets/big_tile.dart';
 import '../widgets/profile_tier_banner.dart';
 import 'limited_edition_screen.dart';
@@ -70,13 +69,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
         // space unconditionally, which is the actual fix.
         fit: StackFit.expand,
         children: [
-          Positioned(
-            top: 0,
-            left: 0,
-            width: MediaQuery.of(context).size.width,
-            height: MediaQuery.of(context).size.height,
-            child: AnimatedWallpaper(gradientColors: wallpaperSwatches[state.wallpaperSwatchIndex]),
-          ),
+          // No wallpaper of its own: Profile is a tab inside RootScreen, whose wallpaper already
+          // shows through. A second one here was a second set of blurred blobs animating on top.
           SafeArea(
             child: SingleChildScrollView(
               padding: const EdgeInsets.fromLTRB(18, 10, 18, 90),
