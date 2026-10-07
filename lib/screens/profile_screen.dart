@@ -134,13 +134,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         style: AppFonts.plexMono(size: 11, color: AppColors.textSoft),
                       ),
                       const SizedBox(height: 14),
-                      GestureDetector(
-                        // Saving needs the server (and email/phone aren't in the offline cache).
-                        onTap: state.isOffline ? () => showNeedsInternet(context) : () => _openEditSheet(context),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 9),
-                          decoration: BoxDecoration(color: AppColors.oliveCard, borderRadius: BorderRadius.circular(100), border: Border.all(color: const Color(0x29F6F5EC))),
-                          child: Text('✏️ Edit profile', style: AppFonts.inter(size: 12, weight: FontWeight.w600)),
+                      OfflineDimmed(
+                        offline: state.isOffline,
+                        radius: 100,
+                        child: GestureDetector(
+                          // Saving needs the server (and email/phone aren't in the offline cache).
+                          onTap: state.isOffline ? () => showNeedsInternet(context) : () => _openEditSheet(context),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 9),
+                            decoration: BoxDecoration(color: AppColors.oliveCard, borderRadius: BorderRadius.circular(100), border: Border.all(color: const Color(0x29F6F5EC))),
+                            child: Text('✏️ Edit profile', style: AppFonts.inter(size: 12, weight: FontWeight.w600)),
+                          ),
                         ),
                       ),
                     ]),
@@ -161,26 +165,35 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const BadgesScreen())),
                   ),
                   const SizedBox(height: 10),
-                  BigTile(
-                    icon: '🏆',
-                    name: 'Limited Edition Items',
-                    description: state.isOffline ? OfflineLines.needsInternetShort : 'Medals and stickers from completed roadmaps',
-                    onTap: state.isOffline ? () => showNeedsInternet(context) : () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const LimitedEditionScreen())),
+                  OfflineDimmed(
+                    offline: state.isOffline,
+                    child: BigTile(
+                      icon: '🏆',
+                      name: 'Limited Edition Items',
+                      description: state.isOffline ? OfflineLines.needsInternetShort : 'Medals and stickers from completed roadmaps',
+                      onTap: state.isOffline ? () => showNeedsInternet(context) : () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const LimitedEditionScreen())),
+                    ),
                   ),
                   const SizedBox(height: 10),
-                  BigTile(
-                    icon: '🎨',
-                    name: 'Skins',
-                    description: state.isOffline ? OfflineLines.needsInternetShort : 'Vehicle skins earned from campaigns',
-                    onTap: state.isOffline ? () => showNeedsInternet(context) : () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SkinsScreen())),
+                  OfflineDimmed(
+                    offline: state.isOffline,
+                    child: BigTile(
+                      icon: '🎨',
+                      name: 'Skins',
+                      description: state.isOffline ? OfflineLines.needsInternetShort : 'Vehicle skins earned from campaigns',
+                      onTap: state.isOffline ? () => showNeedsInternet(context) : () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SkinsScreen())),
+                    ),
                   ),
                   const SizedBox(height: 10),
                   // New — real entry point to Invites, per direction.
-                  BigTile(
-                    icon: '✉️',
-                    name: 'Invites',
-                    description: state.isOffline ? OfflineLines.needsInternetShort : 'KaroCast and co-create opportunities',
-                    onTap: state.isOffline ? () => showNeedsInternet(context) : () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const InvitesScreen())),
+                  OfflineDimmed(
+                    offline: state.isOffline,
+                    child: BigTile(
+                      icon: '✉️',
+                      name: 'Invites',
+                      description: state.isOffline ? OfflineLines.needsInternetShort : 'KaroCast and co-create opportunities',
+                      onTap: state.isOffline ? () => showNeedsInternet(context) : () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const InvitesScreen())),
+                    ),
                   ),
                   const SizedBox(height: 16),
                 ],

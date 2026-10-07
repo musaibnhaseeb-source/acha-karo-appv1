@@ -416,7 +416,9 @@ class _HomeScreenState extends State<HomeScreen> {
           // just a simple text emoji.
           ...state.remoteConfig.activeCampaigns.map((c) => Padding(
                 padding: const EdgeInsets.only(bottom: 10),
-                child: Stack(children: [
+                child: OfflineDimmed(
+                  offline: state.isOffline,
+                  child: Stack(children: [
                   BigTile(
                     customIcon: Container(
                       width: 60, height: 60,
@@ -441,7 +443,8 @@ class _HomeScreenState extends State<HomeScreen> {
                         child: const Icon(Icons.check, size: 14, color: AppColors.inkOnGold),
                       ),
                     ),
-                ]),
+                  ]),
+                ),
               )),
           // New — real, per-campaign teaser cards, per direction: same exact BigTile design as
           // the real campaign card, just non-tappable, for building excitement before a
@@ -493,12 +496,15 @@ class _HomeScreenState extends State<HomeScreen> {
           // "Ranked #N" comes from AppState.myRank — real leaderboard data only (no mock rivals).
           KeyedSubtree(
             key: _leaderboardKey, // Guddi tour spotlight target
-            child: BigTile(
-              icon: '👑',
-              name: 'Leaderboard',
-              // Neutral until real leaderboard data has loaded — never a made-up "#1".
-              description: state.isOffline ? OfflineLines.needsInternetShort : (state.rankDataReady ? 'You\'re ranked #$rank overall' : 'See where you rank'),
-              onTap: state.isOffline ? () => showNeedsInternet(context) : () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const LeaderboardScreen())),
+            child: OfflineDimmed(
+              offline: state.isOffline,
+              child: BigTile(
+                icon: '👑',
+                name: 'Leaderboard',
+                // Neutral until real leaderboard data has loaded — never a made-up "#1".
+                description: state.isOffline ? OfflineLines.needsInternetShort : (state.rankDataReady ? 'You\'re ranked #$rank overall' : 'See where you rank'),
+                onTap: state.isOffline ? () => showNeedsInternet(context) : () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const LeaderboardScreen())),
+              ),
             ),
           ),
           const SizedBox(height: 10),
@@ -510,16 +516,19 @@ class _HomeScreenState extends State<HomeScreen> {
           // Badges tile also moved to Profile now, alongside Limited Edition Items and Skins —
           // grouping achievement/collection content together in one place, per direction.
           // BadgesScreen itself untouched.
-          BigTile(
-            icon: '🎙️',
-            name: 'Town Voice',
-            // Now dynamic, matching whatever the page itself actually shows — real leader name
-            // when active, "Launching soon" when not, driven by the same app_config flag either
-            // way rather than a hardcoded string that could drift out of sync with the page again.
-            description: state.isOffline
-                ? OfflineLines.needsInternetShort
-                : (state.remoteConfig.townVoice.active ? '${state.townVoiceLeader.$1} is leading this week' : 'Launching soon'),
-            onTap: state.isOffline ? () => showNeedsInternet(context) : () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const TownVoiceScreen())),
+          OfflineDimmed(
+            offline: state.isOffline,
+            child: BigTile(
+              icon: '🎙️',
+              name: 'Town Voice',
+              // Now dynamic, matching whatever the page itself actually shows — real leader name
+              // when active, "Launching soon" when not, driven by the same app_config flag either
+              // way rather than a hardcoded string that could drift out of sync with the page again.
+              description: state.isOffline
+                  ? OfflineLines.needsInternetShort
+                  : (state.remoteConfig.townVoice.active ? '${state.townVoiceLeader.$1} is leading this week' : 'Launching soon'),
+              onTap: state.isOffline ? () => showNeedsInternet(context) : () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const TownVoiceScreen())),
+            ),
           ),
           // Redeem tile removed for the pilot, per the current direction — no redemption system
           // exists yet, and a hardcoded "0 pts" tile that always leads to a toast wasn't adding

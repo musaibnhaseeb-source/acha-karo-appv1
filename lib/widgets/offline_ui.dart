@@ -30,6 +30,38 @@ class OfflinePill extends StatelessWidget {
   }
 }
 
+// Greys out a card that needs the server while offline — the same "locked" look as Home's
+// category rings during the global cooldown (_CategoryRing): textSoft-tinted background, soft
+// border, content desaturated at ~0.4 opacity. Taps still reach the child (which shows the
+// needs-internet note). Online: returns the child untouched, so nothing about it changes.
+class OfflineDimmed extends StatelessWidget {
+  final bool offline;
+  final double radius; // match the card's own corner radius
+  final Widget child;
+  const OfflineDimmed({super.key, required this.offline, required this.child, this.radius = 16});
+
+  static const _greyscale = ColorFilter.matrix(<double>[
+    0.2126, 0.7152, 0.0722, 0, 0,
+    0.2126, 0.7152, 0.0722, 0, 0,
+    0.2126, 0.7152, 0.0722, 0, 0,
+    0, 0, 0, 1, 0,
+  ]);
+
+  @override
+  Widget build(BuildContext context) {
+    if (!offline) return child;
+    return Container(
+      key: const ValueKey('offline-dimmed'),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(colors: [AppColors.textSoft.withOpacity(0.08), AppColors.bg2.withOpacity(0.4)]),
+        borderRadius: BorderRadius.circular(radius),
+        border: Border.all(color: AppColors.textSoft.withOpacity(0.3)),
+      ),
+      child: Opacity(opacity: 0.4, child: ColorFiltered(colorFilter: _greyscale, child: child)),
+    );
+  }
+}
+
 // Tapping something that needs the server while offline.
 void showNeedsInternet(BuildContext context) {
   ScaffoldMessenger.of(context)
