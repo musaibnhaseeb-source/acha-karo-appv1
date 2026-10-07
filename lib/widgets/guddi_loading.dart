@@ -13,7 +13,10 @@ class GuddiLoading extends StatefulWidget {
   final bool returning; // signed in (saved session) vs first open / signed out
   final Duration slowAfter;
   final VoidCallback? onRetry; // non-null = the load failed; show the offline state
-  const GuddiLoading({super.key, required this.returning, this.slowAfter = const Duration(seconds: 5), this.onRetry});
+  // With onRetry: the server answered with an error (not offline) — neutral "something went
+  // wrong" instead of "internet off".
+  final bool serverError;
+  const GuddiLoading({super.key, required this.returning, this.slowAfter = const Duration(seconds: 5), this.onRetry, this.serverError = false});
   @override
   State<GuddiLoading> createState() => _GuddiLoadingState();
 }
@@ -99,7 +102,7 @@ class _GuddiLoadingState extends State<GuddiLoading> {
   }
 
   Widget _offline(VoidCallback onRetry) {
-    const line = GuddiLoadingLines.offline;
+    final line = widget.serverError ? GuddiLoadingLines.serverError : GuddiLoadingLines.offline;
     return Center(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16),

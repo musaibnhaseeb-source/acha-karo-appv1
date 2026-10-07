@@ -15,6 +15,9 @@ class StartupLoader {
   StartupLoader({required this.load, required this.onOutcome, this.timeout = const Duration(seconds: 15)});
 
   int _attempt = 0;
+  // Why the current attempt failed: the thrown error, or null when it timed out. Lets the caller
+  // tell "no internet" from "the server answered with an error" (never shown as offline).
+  Object? lastError;
   bool _done = false;
   Timer? _timer;
 
@@ -23,7 +26,10 @@ class StartupLoader {
     final attempt = ++_attempt;
     _timer?.cancel();
     _timer = Timer(timeout, () {
-      if (!_done && attempt == _attempt) onOutcome(StartupOutcome.failed);
+      if (!_done && attempt == _attempt) {
+        lastError = null;
+        onOutcome(StartupOutcome.failed);
+      }
     });
     Future<bool> future;
     try {
@@ -36,9 +42,10 @@ class StartupLoader {
       _done = true;
       _timer?.cancel();
       onOutcome(found ? StartupOutcome.found : StartupOutcome.missing);
-    }, onError: (_) {
+    }, onError: (Object e) {
       if (_done || attempt != _attempt) return;
       _timer?.cancel();
+      lastError = e;
       onOutcome(StartupOutcome.failed);
     });
   }

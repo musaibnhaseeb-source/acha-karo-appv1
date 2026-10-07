@@ -47,6 +47,8 @@ class GuddiLoadingLines {
   // One line, no English subtitle and no dots, matching the other loading states.
   static const offline = GuddiLine('Lagta hai internet off hai');
   static const retry = 'Dobara try karo';
+  // The server answered with an error (not a connection problem): never shown as "internet off".
+  static const serverError = GuddiLine('Kuch masla ho gaya. Dobara try karo.', 'Something went wrong. Try again.');
 }
 
 // Offline mode (layer 2). `saved` is Musa's wording (2026-10-07); the rest are proposals for review.

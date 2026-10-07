@@ -17,6 +17,7 @@ import 'utils/town_voice_reminder.dart';
 import 'widgets/update_available_dialog.dart';
 import 'widgets/guddi_loading.dart';
 import 'utils/startup_loader.dart';
+import 'utils/network_errors.dart';
 import 'supabase_config.dart';
 
 // App entry point — connects to Supabase (all real data lives there, read/written via AppState),
@@ -104,6 +105,7 @@ class _RootScreenState extends State<RootScreen> with WidgetsBindingObserver {
   bool _updateDialogShown = false; // guards the update popup from showing more than once per state change
   StartupLoader? _startupLoader; // cold-start profile load, see _checkExistingSession
   bool _startupFailed = false; // offline/failed: Guddi shows Retry instead of the loading dots
+  bool _startupServerError = false; // failed because the server answered with an error, not offline
   int _startupAttempt = 0;
 
   @override
@@ -229,6 +231,13 @@ class _RootScreenState extends State<RootScreen> with WidgetsBindingObserver {
       if (Supabase.instance.client.auth.currentSession == null) {
         _disposeStartupLoader();
         setState(() => screen = RootScreenState.login);
+      } else if (_startupLoader?.lastError != null && !isNetworkError(_startupLoader!.lastError!)) {
+        // The server answered, with an error (e.g. a bad query): that is NOT "internet off".
+        // Neutral "something went wrong" + Retry; never offline mode or the cache.
+        setState(() {
+          _startupFailed = true;
+          _startupServerError = true;
+        });
       } else {
         // Offline mode: open Home from this account's last snapshot if there is one. Without one
         // (first install, after sign-out) Guddi's offline screen stays, as before.
@@ -243,7 +252,10 @@ class _RootScreenState extends State<RootScreen> with WidgetsBindingObserver {
             });
             DailyReminder.reschedule(loggedToday: appState.loggedDeedToday);
           } else {
-            setState(() => _startupFailed = true);
+            setState(() {
+              _startupFailed = true;
+              _startupServerError = false;
+            });
           }
         });
       }
@@ -255,6 +267,7 @@ class _RootScreenState extends State<RootScreen> with WidgetsBindingObserver {
     // rather than getting stuck.
     setState(() {
       _startupFailed = false;
+      _startupServerError = false;
       screen = found ? RootScreenState.app : RootScreenState.setup;
     });
     // New — real update check, placed here specifically rather than earlier in initState(),
@@ -269,6 +282,7 @@ class _RootScreenState extends State<RootScreen> with WidgetsBindingObserver {
   void _retryStartup() {
     setState(() {
       _startupFailed = false;
+      _startupServerError = false;
       _startupAttempt++; // fresh loading screen (dots, 5 s "slow" line) for the new attempt
     });
     _checkExistingSession();
@@ -333,6 +347,7 @@ class _RootScreenState extends State<RootScreen> with WidgetsBindingObserver {
           key: ValueKey(_startupAttempt),
           returning: Supabase.instance.client.auth.currentSession != null,
           onRetry: _startupFailed ? _retryStartup : null,
+          serverError: _startupServerError,
         );
       case RootScreenState.login:
         return LoginScreen(

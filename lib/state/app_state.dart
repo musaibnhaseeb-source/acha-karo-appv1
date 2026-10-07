@@ -569,7 +569,7 @@ class AppState extends ChangeNotifier {
       if (uid == null) return;
       final row = await Supabase.instance.client
           .from('profiles')
-          .select('active_skin_id, vehicle_skins(icon)')
+          .select('active_skin_id, vehicle_skins!profiles_active_skin_id_fkey(icon)')
           .eq('id', uid)
           .maybeSingle();
       // Handled defensively for both possible relationship shapes — confirmed elsewhere in this

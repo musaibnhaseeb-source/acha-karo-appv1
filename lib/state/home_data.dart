@@ -26,10 +26,14 @@ class HomeData {
     required this.membership,
   });
 
-  // Explicit columns: only what the app reads. vehicle_skins(icon) is the equipped skin, and
+  // Explicit columns: only what the app reads. The vehicle_skins embed is the equipped skin, and
   // joined_at / last_acked_update_id are for the update check, so neither needs its own query.
+  // The FK hint is REQUIRED: profiles reaches vehicle_skins by several paths (active_skin_id, and
+  // through user_vehicle_skins / user_skin_discounts / user_campaign_vehicles), so a bare
+  // vehicle_skins(icon) is ambiguous and PostgREST answers HTTP 300 (PGRST201) — the whole read
+  // fails. The response key is still 'vehicle_skins'.
   static const profileColumns =
-      'id, name, email, phone, city, points, wallpaper_swatch_index, active_skin_id, joined_at, last_acked_update_id, vehicle_skins(icon)';
+      'id, name, email, phone, city, points, wallpaper_swatch_index, active_skin_id, joined_at, last_acked_update_id, vehicle_skins!profiles_active_skin_id_fkey(icon)';
   // No photo_url or GPS: Home and badges never use them.
   static const deedColumns = 'id, type, points, created_at, status, campaign_id';
 
