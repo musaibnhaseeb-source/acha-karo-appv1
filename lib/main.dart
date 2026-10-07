@@ -127,6 +127,8 @@ class _RootScreenState extends State<RootScreen> with WidgetsBindingObserver {
         DailyReminder.cancelAll(); // no "Guddi is waiting" nudges for a signed-out phone
         _disposeStartupLoader();
         _startupFailed = false;
+        // Offline queue (deeds + photos) and the Home cache are deleted from the phone.
+        context.read<AppState>().wipeOfflineData();
         context.read<AppState>().resetLocalState();
         Navigator.of(context).popUntil((route) => route.isFirst);
         setState(() {
@@ -160,6 +162,14 @@ class _RootScreenState extends State<RootScreen> with WidgetsBindingObserver {
         ),
       );
     }
+    // Offline queue: deeds are only sent (and the connection only re-checked) while the app is in
+    // front — never in the background or while closed.
+    if (appState == AppLifecycleState.paused || appState == AppLifecycleState.detached) {
+      context.read<AppState>().setForeground(false);
+    }
+    if (appState == AppLifecycleState.resumed && screen == RootScreenState.app) {
+      context.read<AppState>().setForeground(true);
+    }
     // Cold start failed offline (M1): coming back to the app retries automatically.
     if (appState == AppLifecycleState.resumed && screen == RootScreenState.checkingSession && _startupFailed) {
       _retryStartup();
@@ -174,7 +184,10 @@ class _RootScreenState extends State<RootScreen> with WidgetsBindingObserver {
       // Throttled: Android resumes the app after every camera/gallery pick and quick app switch,
       // and each one used to re-run the whole load. Within _resumeRefreshInterval of the last
       // successful load, what's on screen is kept.
-      if (_isStale(appStateObj.profileLoadedAt)) {
+      // Offline: setForeground(true) above already re-checks the connection (with a real load).
+      if (appStateObj.isOffline) {
+        DailyReminder.reschedule(loggedToday: appStateObj.loggedDeedToday);
+      } else if (_isStale(appStateObj.profileLoadedAt)) {
         // Every app open also rebuilds the daily-reminder schedule (which resets its back-off).
         appStateObj.tryLoadExistingProfile().then(
           (found) {
@@ -215,7 +228,22 @@ class _RootScreenState extends State<RootScreen> with WidgetsBindingObserver {
         _disposeStartupLoader();
         setState(() => screen = RootScreenState.login);
       } else {
-        setState(() => _startupFailed = true);
+        // Offline mode: open Home from this account's last snapshot if there is one. Without one
+        // (first install, after sign-out) Guddi's offline screen stays, as before.
+        final appState = context.read<AppState>();
+        appState.openFromCache().then((opened) {
+          if (!mounted || screen != RootScreenState.checkingSession) return;
+          if (opened) {
+            _disposeStartupLoader();
+            setState(() {
+              _startupFailed = false;
+              screen = RootScreenState.app;
+            });
+            DailyReminder.reschedule(loggedToday: appState.loggedDeedToday);
+          } else {
+            setState(() => _startupFailed = true);
+          }
+        });
       }
       return;
     }

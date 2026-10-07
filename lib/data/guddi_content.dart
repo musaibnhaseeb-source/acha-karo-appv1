@@ -49,6 +49,37 @@ class GuddiLoadingLines {
   static const retry = 'Dobara try karo';
 }
 
+// Offline mode (layer 2). `saved` is Musa's wording (2026-10-07); the rest are proposals for review.
+class OfflineLines {
+  // Right after a deed is saved on the phone instead of sent.
+  static const saved = GuddiLine(
+    'Yeh acha kaam phone mein save ho gaya hai. Internet on karke app kholo, tabhi yeh register hoga.',
+    "Saved on your phone. It only counts once you're online with the app open.",
+  );
+  static const savedOk = 'Theek hai';
+  static const pill = 'Offline';
+  // Screens that need the server (leaderboard, Town Voice, limited edition, skins, invites, edit profile).
+  static const needsInternet = GuddiLine('Iske liye internet chahiye', 'This needs internet.');
+  static const needsInternetShort = 'Internet chahiye';
+  // Home, while deeds are waiting. {n} = how many.
+  static const waiting = GuddiLine('{n} acha kaam phone mein save hain', "They count once you're online with the app open.");
+  static const waitingOne = GuddiLine('1 acha kaam phone mein save hai', "It counts once you're online with the app open.");
+  static const waitingPoints = '+{x} waiting';
+  static const waitingBadge = 'WAITING';
+  static const queueFull = GuddiLine(
+    'Phone mein pehle se 20 acha kaam save hain. Internet on karke app kholo taake yeh register ho jayein, phir naye save ho sakte hain.',
+    '20 deeds are already saved on your phone. Go online with the app open to send them, then you can save more.',
+  );
+  static const saveFailed = GuddiLine('Phone mein save nahi ho saka. Dobara try karo.', "Couldn't save it on your phone. Please try again.");
+  // A waiting deed the server refused when it was sent (its photo was already used on a deed).
+  static const rejectedOnSend = GuddiLine(
+    'Ek save kiya hua acha kaam register nahi ho saka: yeh photo pehle bhi use ho chuki thi.',
+    "One saved deed couldn't be sent: that photo was already used.",
+  );
+  // Settings > Sign out, while deeds are still waiting. {n} = how many.
+  static const signOutWarning = "{n} saved acha kaam haven't been sent yet. Signing out deletes them from this phone.";
+}
+
 // Duplicate photo (v1.3.2, submit form): the photo was already used on one of this user's deeds.
 // Approved copy (Musa, 2026-09-30).
 class GuddiDuplicatePhotoLines {

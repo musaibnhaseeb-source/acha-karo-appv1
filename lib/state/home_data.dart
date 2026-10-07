@@ -33,6 +33,30 @@ class HomeData {
   // No photo_url or GPS: Home and badges never use them.
   static const deedColumns = 'id, type, points, created_at, status, campaign_id';
 
+  // Offline mode (home_cache.dart) keeps the last good HomeData on the phone. Email and phone are
+  // left out on purpose: nothing offline shows them (Edit profile is unavailable offline).
+  static const _notCached = {'email', 'phone'};
+
+  Map<String, dynamic> toCacheJson() => {
+        'profile': {for (final e in profile.entries) if (!_notCached.contains(e.key)) e.key: e.value},
+        'deeds': deeds,
+        'badges': badges,
+        'frozenBadges': frozenBadges,
+        'hallOfFameClaims': hallOfFameClaims,
+        'membership': membership,
+      };
+
+  static List<Map<String, dynamic>>? _rows(Object? v) => v == null ? null : [for (final r in v as List) Map<String, dynamic>.from(r as Map)];
+
+  factory HomeData.fromCacheJson(Map<String, dynamic> j) => HomeData(
+        profile: Map<String, dynamic>.from(j['profile'] as Map),
+        deeds: _rows(j['deeds']),
+        badges: _rows(j['badges']),
+        frozenBadges: _rows(j['frozenBadges']),
+        hallOfFameClaims: _rows(j['hallOfFameClaims']),
+        membership: _rows(j['membership']),
+      );
+
   // Returns null when the account has no profile row (new user, goes to Setup). Throws if the
   // profile read itself fails, so the cold-start loader can show the offline state.
   static Future<HomeData?> fetch(SupabaseClient client, String uid) async {

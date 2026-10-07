@@ -35,6 +35,7 @@ dependencies:
                                         # (so notifications were silently dead in release APKs).
   timezone: ^0.9.4          # scheduled-notification dates (already pulled in by flutter_local_notifications)
   crypto: ^3.0.0              # SHA-256 of cleaned deed photos: duplicate-photo check (already a transitive dependency)
+  path_provider: ^2.1.5      # offline mode: app-private folder for the deed queue + Home cache (already a transitive dependency)
 
 dev_dependencies:
   flutter_test:

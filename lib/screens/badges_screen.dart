@@ -4,6 +4,7 @@ import '../theme/app_theme.dart';
 import '../state/app_state.dart';
 import '../widgets/animated_wallpaper.dart';
 import '../data/badges.dart';
+import '../data/guddi_content.dart';
 
 // Ported from #overlayBadges / renderBadgesOverlay() in the original — badges grouped by
 // category, each showing its unlock state with a tier pill (or "LOCKED").
@@ -14,6 +15,9 @@ class BadgesScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final state = context.watch<AppState>();
     final unlockedIds = state.user.badges;
+    // Offline mode: badges that deeds still waiting on the phone would unlock. Shown as WAITING,
+    // not earned — nothing is written until the server has the deeds.
+    final waitingIds = state.waitingBadgeIds;
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -77,6 +81,7 @@ class BadgesScreen extends StatelessWidget {
                           childAspectRatio: 1.5,
                           children: inCat.map((b) {
                             final unlocked = unlockedIds.contains(b.id);
+                            final waiting = !unlocked && waitingIds.contains(b.id);
                             return Container(
                               padding: const EdgeInsets.all(12),
                               decoration: BoxDecoration(
@@ -85,7 +90,7 @@ class BadgesScreen extends StatelessWidget {
                                 border: Border.all(color: unlocked ? AppColors.gold.withOpacity(0.35) : Colors.transparent),
                               ),
                               child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center, children: [
-                                Opacity(opacity: unlocked ? 1 : 0.35, child: Text(b.icon, style: const TextStyle(fontSize: 22))),
+                                Opacity(opacity: unlocked ? 1 : (waiting ? 0.7 : 0.35), child: Text(b.icon, style: const TextStyle(fontSize: 22))),
                                 const SizedBox(height: 6),
                                 Text(b.name, style: AppFonts.inter(size: 11, weight: FontWeight.w600, color: unlocked ? AppColors.text : AppColors.textSoft), maxLines: 2, overflow: TextOverflow.ellipsis),
                                 const SizedBox(height: 3),
@@ -98,7 +103,7 @@ class BadgesScreen extends StatelessWidget {
                                     borderRadius: BorderRadius.circular(100),
                                   ),
                                   child: Text(
-                                    unlocked ? '✓ ${b.tier.toUpperCase()}' : 'LOCKED',
+                                    unlocked ? '✓ ${b.tier.toUpperCase()}' : (waiting ? '⏳ ${OfflineLines.waitingBadge}' : 'LOCKED'),
                                     style: AppFonts.plexMono(size: 8.5, weight: FontWeight.w700, color: unlocked ? AppColors.gold : AppColors.textSoft),
                                   ),
                                 ),

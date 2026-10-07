@@ -7,6 +7,8 @@ import '../widgets/edit_profile_sheet.dart';
 import '../widgets/home_side_sheet.dart';
 import '../widgets/big_tile.dart';
 import '../widgets/profile_tier_banner.dart';
+import '../widgets/offline_ui.dart';
+import '../data/guddi_content.dart';
 import 'limited_edition_screen.dart';
 import 'skins_screen.dart';
 import 'invites_screen.dart';
@@ -81,6 +83,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(_greeting(), style: AppFonts.plexMono(size: 10.5)),
+                      if (state.isOffline) const OfflinePill(),
                       GestureDetector(
                         onTap: () => _scaffoldKey.currentState?.openEndDrawer(),
                         child: Container(
@@ -126,12 +129,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       // introduced. Matches Leaderboard's own "overall" labeling now.
                       Text(
                         // Rank only once real leaderboard data has loaded — never a made-up "#1".
-                        state.rankDataReady ? '#$rank overall · ${user.points} pts' : '${user.points} pts',
+                        (state.rankDataReady && !state.isOffline ? '#$rank overall · ${user.points} pts' : '${user.points} pts') +
+                            (state.waitingPoints > 0 ? ' · ${OfflineLines.waitingPoints.replaceAll('{x}', '${state.waitingPoints}')}' : ''),
                         style: AppFonts.plexMono(size: 11, color: AppColors.textSoft),
                       ),
                       const SizedBox(height: 14),
                       GestureDetector(
-                        onTap: () => _openEditSheet(context),
+                        // Saving needs the server (and email/phone aren't in the offline cache).
+                        onTap: state.isOffline ? () => showNeedsInternet(context) : () => _openEditSheet(context),
                         child: Container(
                           padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 9),
                           decoration: BoxDecoration(color: AppColors.oliveCard, borderRadius: BorderRadius.circular(100), border: Border.all(color: const Color(0x29F6F5EC))),
@@ -159,23 +164,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   BigTile(
                     icon: '🏆',
                     name: 'Limited Edition Items',
-                    description: 'Medals and stickers from completed roadmaps',
-                    onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const LimitedEditionScreen())),
+                    description: state.isOffline ? OfflineLines.needsInternetShort : 'Medals and stickers from completed roadmaps',
+                    onTap: state.isOffline ? () => showNeedsInternet(context) : () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const LimitedEditionScreen())),
                   ),
                   const SizedBox(height: 10),
                   BigTile(
                     icon: '🎨',
                     name: 'Skins',
-                    description: 'Vehicle skins earned from campaigns',
-                    onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SkinsScreen())),
+                    description: state.isOffline ? OfflineLines.needsInternetShort : 'Vehicle skins earned from campaigns',
+                    onTap: state.isOffline ? () => showNeedsInternet(context) : () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SkinsScreen())),
                   ),
                   const SizedBox(height: 10),
                   // New — real entry point to Invites, per direction.
                   BigTile(
                     icon: '✉️',
                     name: 'Invites',
-                    description: 'KaroCast and co-create opportunities',
-                    onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const InvitesScreen())),
+                    description: state.isOffline ? OfflineLines.needsInternetShort : 'KaroCast and co-create opportunities',
+                    onTap: state.isOffline ? () => showNeedsInternet(context) : () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const InvitesScreen())),
                   ),
                   const SizedBox(height: 16),
                 ],

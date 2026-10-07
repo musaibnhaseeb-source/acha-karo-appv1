@@ -10,6 +10,8 @@ import 'first_deed.dart';
 import 'approval_notify_ask.dart';
 import '../utils/daily_reminder.dart';
 import '../data/guddi_content.dart';
+import 'guddi_home.dart';
+import 'offline_ui.dart';
 
 // Extracted from HomeScreen's _openSubmitModal — was private to that one screen, now shared so
 // the campaign quick-action CTA (and anywhere else that needs this later) gets the exact same
@@ -32,6 +34,22 @@ void openSubmitDeedFlow(BuildContext context, String type, {String? campaignId, 
     // attempt gets an honest message instead of a false "thanks" animation.
     if (result.blockedByCooldown) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Still on cooldown — try again shortly.")));
+      return;
+    }
+    // Offline mode: the phone queue is full, or the deed couldn't be written to the phone.
+    if (result.queueFull) {
+      await showGuddiNotice(context, OfflineLines.queueFull, pose: GuddiPoses.worried);
+      return;
+    }
+    if (result.saveFailed) {
+      await showGuddiNotice(context, OfflineLines.saveFailed, pose: GuddiPoses.worried);
+      return;
+    }
+    // Saved on the phone, not sent yet: no "thank you / approved" celebration, just Guddi's
+    // reminder that it only counts once the app is open online.
+    if (result.queued) {
+      DailyReminder.reschedule(loggedToday: true);
+      await showGuddiNotice(context, OfflineLines.saved);
       return;
     }
     // A deed was just logged — today's Guddi reminder is no longer needed.

@@ -5,6 +5,7 @@ import '../theme/app_theme.dart';
 import '../state/app_state.dart';
 import '../widgets/animated_wallpaper.dart';
 import '../utils/daily_reminder.dart';
+import '../data/guddi_content.dart';
 
 // Ported from the original's known settings sheet — text scale, sound, wallpaper color. Nothing
 // new decided here, same logic as already established earlier in this whole project.
@@ -18,7 +19,18 @@ class SettingsScreen extends StatelessWidget {
         backgroundColor: AppColors.bg2,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
         title: Text('Sign out?', style: AppFonts.fraunces(size: 16, weight: FontWeight.w600)),
-        content: Text("You'll need to sign in again with a code sent to your email.", style: AppFonts.inter(size: 12.5, color: AppColors.textSoft)),
+        content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text("You'll need to sign in again with a code sent to your email.", style: AppFonts.inter(size: 12.5, color: AppColors.textSoft)),
+          // Offline mode: deeds still waiting on this phone are deleted on sign-out — say so first.
+          if (context.read<AppState>().waitingDeeds.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Text(
+              OfflineLines.signOutWarning.replaceAll('{n}', '${context.read<AppState>().waitingDeeds.length}'),
+              key: const ValueKey('signout-waiting-warning'),
+              style: AppFonts.inter(size: 12.5, weight: FontWeight.w600, color: const Color(0xFFE39B84)),
+            ),
+          ],
+        ]),
         actions: [
           TextButton(onPressed: () => Navigator.of(ctx).pop(), child: Text('Cancel', style: AppFonts.inter(size: 13, color: AppColors.textSoft))),
           TextButton(

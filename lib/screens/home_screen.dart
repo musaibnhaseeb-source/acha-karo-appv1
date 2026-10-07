@@ -23,6 +23,7 @@ import '../widgets/guddi_tour.dart';
 import '../widgets/first_deed.dart';
 import '../widgets/guddi_home.dart';
 import '../utils/deed_streak.dart';
+import '../widgets/offline_ui.dart';
 
 String _formatRemaining(Duration d) {
   final mins = (d.inSeconds / 60).ceil();
@@ -186,6 +187,13 @@ class _HomeScreenState extends State<HomeScreen> {
     final lockedKeys = deedCatalog.keys.where((k) => state.cooldownRemaining(k) > Duration.zero).toList();
     final rank = _computeRank(state);
     if (!_tourConsidered) WidgetsBinding.instance.addPostFrameCallback((_) => _maybeStartTour());
+    if (state.queueNotice != null) {
+      final notice = state.queueNotice!;
+      state.queueNotice = null;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${notice.roman}${notice.en != null ? ' · ${notice.en}' : ''}')));
+      });
+    }
     final showFirstDeedBubble = state.needsFirstDeed && _tourConsidered && !_tourRunning;
 
     // Real streak / week row / Guddi mood — all from this user's own loaded deed history.
@@ -255,6 +263,7 @@ class _HomeScreenState extends State<HomeScreen> {
               // "Day 1" indefinitely since Simulator (the only thing that ever advanced it) is
               // hidden for the pilot.
               Text(_greeting(), style: AppFonts.plexMono(size: 10.5)),
+              if (state.isOffline) const OfflinePill(),
               // Bell icon removed — redundant with Notifications already living in the Side
               // Sheet. The menu button (which opens that sheet) is the only entry point needed.
               GestureDetector(
@@ -297,7 +306,14 @@ class _HomeScreenState extends State<HomeScreen> {
             children: [
               Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text('TOTAL POINTS', style: AppFonts.plexMono(size: 9)),
-                Text('${state.user.points}', style: AppFonts.fraunces(size: 28, weight: FontWeight.w700, color: AppColors.gold)),
+                Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
+                  Text('${state.user.points}', style: AppFonts.fraunces(size: 28, weight: FontWeight.w700, color: AppColors.gold)),
+                  // Offline: points of deeds still on the phone, never added to the total until sent.
+                  if (state.waitingPoints > 0) ...[
+                    const SizedBox(width: 8),
+                    WaitingPointsChip(points: state.waitingPoints),
+                  ],
+                ]),
               ]),
               Row(children: [
                 Text(tier.icon, style: const TextStyle(fontSize: 22)),
@@ -306,6 +322,10 @@ class _HomeScreenState extends State<HomeScreen> {
               ]),
             ],
           ),
+          if (state.waitingDeeds.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            WaitingDeedsCard(count: state.waitingDeeds.length),
+          ],
           // Week row + streak only once real deed history has loaded — never a guessed/zero state.
           if (state.deedHistoryLoaded) ...[
             const SizedBox(height: 12),
@@ -406,7 +426,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     name: c.title,
                     description: c.description,
-                    onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => CampaignDetailScreen(campaign: c))),
+                    onTap: state.isOffline ? () => showNeedsInternet(context) : () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => CampaignDetailScreen(campaign: c))),
                   ),
                   // New — real tick mark once this campaign's Hall of Fame is genuinely
                   // claimed, per direction: an at-a-glance "you've finished this one" signal
@@ -477,8 +497,8 @@ class _HomeScreenState extends State<HomeScreen> {
               icon: '👑',
               name: 'Leaderboard',
               // Neutral until real leaderboard data has loaded — never a made-up "#1".
-              description: state.rankDataReady ? 'You\'re ranked #$rank overall' : 'See where you rank',
-              onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const LeaderboardScreen())),
+              description: state.isOffline ? OfflineLines.needsInternetShort : (state.rankDataReady ? 'You\'re ranked #$rank overall' : 'See where you rank'),
+              onTap: state.isOffline ? () => showNeedsInternet(context) : () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const LeaderboardScreen())),
             ),
           ),
           const SizedBox(height: 10),
@@ -496,8 +516,10 @@ class _HomeScreenState extends State<HomeScreen> {
             // Now dynamic, matching whatever the page itself actually shows — real leader name
             // when active, "Launching soon" when not, driven by the same app_config flag either
             // way rather than a hardcoded string that could drift out of sync with the page again.
-            description: state.remoteConfig.townVoice.active ? '${state.townVoiceLeader.$1} is leading this week' : 'Launching soon',
-            onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const TownVoiceScreen())),
+            description: state.isOffline
+                ? OfflineLines.needsInternetShort
+                : (state.remoteConfig.townVoice.active ? '${state.townVoiceLeader.$1} is leading this week' : 'Launching soon'),
+            onTap: state.isOffline ? () => showNeedsInternet(context) : () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const TownVoiceScreen())),
           ),
           // Redeem tile removed for the pilot, per the current direction — no redemption system
           // exists yet, and a hardcoded "0 pts" tile that always leads to a toast wasn't adding

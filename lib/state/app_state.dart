@@ -14,6 +14,11 @@ import '../data/remote_config.dart';
 import '../utils/app_version.dart';
 import '../utils/deed_photo_upload.dart';
 import 'home_data.dart';
+import 'home_cache.dart';
+import 'deed_queue.dart';
+import '../utils/network_errors.dart';
+import 'package:path_provider/path_provider.dart';
+import '../data/guddi_content.dart';
 
 const Duration cooldownDuration = Duration(hours: 1); // same 1hr cooldown as the original
 
@@ -80,7 +85,12 @@ class SubmitResult {
   // v1.3.2: the photo was already used on one of this user's deeds. Nothing was saved; the submit
   // form stays open so they can take a new photo.
   final bool duplicatePhoto;
-  const SubmitResult({required this.flagged, required this.leveledUpTier, required this.newMilestones, this.blockedByCooldown = false, this.duplicatePhoto = false});
+  // Offline mode: saved on the phone to send later (queued), the phone queue already holds its
+  // maximum (queueFull), or it couldn't be written to the phone's storage (saveFailed).
+  final bool queued;
+  final bool queueFull;
+  final bool saveFailed;
+  const SubmitResult({required this.flagged, required this.leveledUpTier, required this.newMilestones, this.blockedByCooldown = false, this.duplicatePhoto = false, this.queued = false, this.queueFull = false, this.saveFailed = false});
 }
 
 // Why a submission goes to a moderator instead of being approved straight away. These strings
@@ -204,6 +214,13 @@ const List<List<Color>> wallpaperSwatches = [
 // ACHA_KARO_FINALIZED.html's architecture comment block for the full Supabase table mapping,
 // which applies identically here regardless of frontend framework.
 class AppState extends ChangeNotifier {
+  // Tests pass their own offline queue / Home cache (temp folders); the app uses the defaults.
+  AppState({DeedQueue? deedQueue, HomeCache? homeCache})
+      : _injectedQueue = deedQueue,
+        _injectedCache = homeCache;
+  final DeedQueue? _injectedQueue;
+  final HomeCache? _injectedCache;
+
   int simDay = 1;
   UserProfile user = UserProfile();
   // New — real, private membership number (AK-100001 style). Loaded from the separate
@@ -705,6 +722,7 @@ class AppState extends ChangeNotifier {
   // any rank at all, so a failed (offline) load or an empty result can never grant these.
   bool leaderboardLoaded = false;
   bool get rankDataReady {
+    if (!leaderboardLoaded) return false;
     final uid = Supabase.instance.client.auth.currentUser?.id;
     return leaderboardLoaded && realLeaderboard.any((e) => e.id != uid);
   }
@@ -1066,6 +1084,9 @@ class AppState extends ChangeNotifier {
     final meta = deedCatalog[type];
     if (meta == null) return SubmitResult(flagged: false, leveledUpTier: null, newMilestones: []);
 
+    // Offline mode: the deed is saved on the phone and sent later (see _queueDeed).
+    if (isOffline) return _queueDeed(type, details, photoBytes: photoBytes, campaignId: campaignId, shareLocation: shareLocation, afterDuplicate: afterDuplicate);
+
     // Campaign state (a campaign's cooldown override) is refreshed here so a campaign toggled
     // while the app was open doesn't linger. It used to be awaited, which put ~1 s of network in
     // front of every submit; now the cooldown check below uses the config already loaded (cold
@@ -1090,6 +1111,12 @@ class AppState extends ChangeNotifier {
       final upload = await _uploadDeedPhoto(uid, photoBytes);
       if (upload.status == PhotoUploadStatus.duplicate) {
         return const SubmitResult(flagged: false, leveledUpTier: null, newMilestones: [], duplicatePhoto: true);
+      }
+      // No internet after all (nothing was saved on the server): switch to offline mode and save
+      // the deed on the phone instead of creating it without its photo.
+      if (upload.status == PhotoUploadStatus.unreachable) {
+        _goOffline();
+        return _queueDeed(type, details, photoBytes: photoBytes, campaignId: campaignId, shareLocation: shareLocation, afterDuplicate: afterDuplicate, cooldownChecked: true);
       }
       photoPath = upload.path; // null on any other failure: the deed is still created, as before
     }
@@ -1142,9 +1169,15 @@ class AppState extends ChangeNotifier {
               'reason': reasonText,
             });
           }
-        } catch (_) {
-          // Deliberately swallowed — see comment above. Local queue below still reflects this
-          // submission regardless of whether the remote write succeeded.
+        } catch (e) {
+          // The connection dropped before the deed was saved: queue it (photo already uploaded)
+          // so it's sent later instead of being lost.
+          if (deedId == null && isNetworkError(e)) {
+            _goOffline();
+            return _queueDeed(type, details, campaignId: campaignId, shareLocation: shareLocation, afterDuplicate: afterDuplicate, cooldownChecked: true, position: position, positionKnown: true, uploadedPhotoPath: photoPath);
+          }
+          // Otherwise deliberately swallowed — see comment above. Local queue below still
+          // reflects this submission regardless of whether the remote write succeeded.
         }
       }
 
@@ -1188,7 +1221,11 @@ class AppState extends ChangeNotifier {
           'points': user.points + awardedPoints,
           'last_points_activity': DateTime.now().toIso8601String(),
         }).eq('id', uid);
-      } catch (_) {
+      } catch (e) {
+        if (deedId == null && isNetworkError(e)) {
+          _goOffline();
+          return _queueDeed(type, details, campaignId: campaignId, shareLocation: shareLocation, afterDuplicate: afterDuplicate, cooldownChecked: true, position: position, positionKnown: true, uploadedPhotoPath: photoPath);
+        }
         // Swallowed for the same reason as above.
       }
     }
@@ -1480,6 +1517,8 @@ class AppState extends ChangeNotifier {
     lastLoggedAt = {};
     feedback = [];
     feedbackLoaded = false;
+    isOffline = false; // the on-disk queue/cache are wiped separately: wipeOfflineData()
+    queueNotice = null;
     profileLoadedAt = null;
     _updateCheckProfile = null;
     notifications = [];
@@ -1508,12 +1547,28 @@ class AppState extends ChangeNotifier {
   Future<bool> tryLoadExistingProfile({bool awaitBackground = false}) async {
     final uid = Supabase.instance.client.auth.currentUser?.id;
     if (uid == null) return false;
-    final data = await HomeData.fetch(Supabase.instance.client, uid);
+    // The offline queue is read from the phone alongside (first time only; never throws), so
+    // queued deeds count toward cooldowns as soon as Home shows.
+    final queueLoad = _loadQueueFor(uid);
+    final HomeData? data;
+    try {
+      data = await HomeData.fetch(Supabase.instance.client, uid);
+    } catch (e) {
+      if (isNetworkError(e)) _goOffline(); // already on screen (resume / refresh): offline mode
+      rethrow;
+    }
+    await queueLoad;
     if (data == null) return false;
     // Signed out (or switched account) while this was in flight: never apply that data.
     if (Supabase.instance.client.auth.currentUser?.id != uid) return false;
     applyHomeData(data);
+    _saveHomeCache(uid, data);
+    final cameBackOnline = isOffline;
+    isOffline = false;
+    if (cameBackOnline) notifyListeners();
     final background = _loadBackgroundData(uid);
+    // Anything saved while offline goes out now (one at a time, oldest first).
+    if (!deedQueue.isEmpty) unawaited(syncNow(ignoreBackoff: cameBackOnline));
     if (awaitBackground) await background;
     return true;
   }
@@ -1523,8 +1578,9 @@ class AppState extends ChangeNotifier {
   void applyHomeData(HomeData data) {
     final row = data.profile;
     user.name = row['name'] as String? ?? user.name;
-    user.email = row['email'] as String?;
-    user.phone = row['phone'] as String?;
+    // The offline Home cache leaves email/phone out; keep what's loaded rather than blank them.
+    if (row.containsKey('email')) user.email = row['email'] as String?;
+    if (row.containsKey('phone')) user.phone = row['phone'] as String?;
     user.city = row['city'] as String? ?? user.city;
     user.points = row['points'] as int? ?? 0;
     // Real fix here — loads the real, saved wallpaper selection now, matching the new save
@@ -1594,6 +1650,7 @@ class AppState extends ChangeNotifier {
       _applyBadgeUpdate();
     }
 
+    mergeQueuedCooldowns();
     profileLoadedAt = DateTime.now();
     notifyListeners();
   }
@@ -1684,6 +1741,259 @@ class AppState extends ChangeNotifier {
     }
   }
 
+  // ===== Offline mode (layer 2) =====
+  // isOffline: running without the server — opened from the Home cache at a cold start with no
+  // internet, or a request just failed for lack of a connection. Deeds then go to the phone queue
+  // (deed_queue.dart) and screens that need the server say "internet chahiye". It ends with the
+  // next successful profile load, which syncNow() retries every 15 s while the app is open.
+  // Nothing runs while the app is in the background or closed.
+  bool isOffline = false;
+  static Future<Directory> _offlineDir() => getApplicationSupportDirectory(); // app-private
+  late final DeedQueue deedQueue = _injectedQueue ?? DeedQueue(DeedQueueStore(_offlineDir));
+  late final HomeCache homeCache = _injectedCache ?? HomeCache(_offlineDir);
+  // One-shot message for Home (a waiting deed the server refused). Home shows it, then clears it.
+  GuddiLine? queueNotice;
+  Timer? _syncTimer;
+  bool _syncing = false;
+  bool _foreground = true;
+  static const _offlineProbeInterval = Duration(seconds: 15);
+
+  List<QueuedDeed> get waitingDeeds => deedQueue.items;
+  // Shown as "+X waiting" — never added to user.points until the server has the deed.
+  int get waitingPoints => deedQueue.waitingPoints;
+
+  // Badges the waiting deeds would unlock if approved, shown as "waiting" (never written to
+  // user_badges from here). Checked against a temporary deed list that includes them.
+  Set<String> get waitingBadgeIds {
+    if (deedQueue.isEmpty) return const {};
+    final real = deedsLog;
+    deedsLog = [
+      ...real,
+      for (final d in deedQueue.items) DeedLogEntry(type: d.type, points: d.points, day: 0, createdAt: d.queuedAt, status: 'approved', campaignId: d.campaignId),
+    ];
+    try {
+      return badgeDefs.where((b) => b.check(this)).map((b) => b.id).where((id) => !user.badges.contains(id) && !_frozenBadgeIds.contains(id)).toSet();
+    } finally {
+      deedsLog = real;
+    }
+  }
+
+  Future<void> _loadQueueFor(String uid) async {
+    try {
+      await deedQueue.loadFor(uid);
+      mergeQueuedCooldowns();
+    } catch (_) {
+      // Unreadable storage: the app still works online; nothing is sent from a queue it can't read.
+    }
+  }
+
+  // Waiting deeds count toward cooldowns (per type and the global one) from when they were done.
+  @visibleForTesting
+  void mergeQueuedCooldowns() {
+    for (final d in deedQueue.items) {
+      final existing = lastLoggedAt[d.type];
+      if (existing == null || d.queuedAt.isAfter(existing)) lastLoggedAt[d.type] = d.queuedAt;
+    }
+  }
+
+  void _saveHomeCache(String uid, HomeData data) {
+    homeCache.save(uid, data).then((_) async {
+      // Signed out while it was being written: don't leave it behind.
+      if (Supabase.instance.client.auth.currentUser?.id != uid) await homeCache.clear();
+    }, onError: (_) {});
+  }
+
+  // Cold start with no internet: open Home from this account's last snapshot. False if there's
+  // none (first install, after sign-out, another account) — then the Guddi offline screen stays.
+  Future<bool> openFromCache() async {
+    final uid = Supabase.instance.client.auth.currentUser?.id;
+    if (uid == null) return false;
+    try {
+      final data = await homeCache.load(uid);
+      if (data == null) return false;
+      await _loadQueueFor(uid);
+      if (Supabase.instance.client.auth.currentUser?.id != uid) return false;
+      applyHomeData(data);
+      _goOffline();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  void _goOffline() {
+    if (!isOffline) {
+      isOffline = true;
+      notifyListeners();
+    }
+    _scheduleSync();
+  }
+
+  // From RootScreen's lifecycle: sending and probing only happen while the app is in front.
+  void setForeground(bool foreground) {
+    _foreground = foreground;
+    if (!foreground) {
+      _syncTimer?.cancel();
+      _syncTimer = null;
+      return;
+    }
+    if (isOffline || !deedQueue.isEmpty) unawaited(syncNow(ignoreBackoff: true));
+  }
+
+  // Offline: try a real load (success = back online). Online: send the waiting deeds.
+  Future<void> syncNow({bool ignoreBackoff = false}) async {
+    final uid = Supabase.instance.client.auth.currentUser?.id;
+    if (_syncing || !_foreground || uid == null) return;
+    _syncing = true;
+    _syncTimer?.cancel();
+    try {
+      if (isOffline) {
+        try {
+          await tryLoadExistingProfile();
+          unawaited(loadRemoteConfig());
+          ignoreBackoff = true; // the connection just came back
+        } catch (_) {}
+      }
+      if (!isOffline && !deedQueue.isEmpty) await _sendQueue(uid, ignoreBackoff);
+    } finally {
+      _syncing = false;
+      _scheduleSync();
+    }
+  }
+
+  void _scheduleSync() {
+    _syncTimer?.cancel();
+    _syncTimer = null;
+    if (!_foreground || Supabase.instance.client.auth.currentUser == null) return;
+    Duration? wait;
+    if (isOffline) {
+      wait = _offlineProbeInterval;
+    } else if (!deedQueue.isEmpty) {
+      final next = deedQueue.nextAttemptAt;
+      wait = next == null ? Duration.zero : next.difference(DateTime.now());
+    }
+    if (wait == null) return;
+    if (wait < const Duration(seconds: 1)) wait = const Duration(seconds: 1);
+    _syncTimer = Timer(wait, () => syncNow());
+  }
+
+  Future<void> _sendQueue(String uid, bool ignoreBackoff) async {
+    final result = await deedQueue.sendAll(_SupabaseDeedSendOps(this, uid), ignoreBackoff: ignoreBackoff, onSent: (d) {
+      if (Supabase.instance.client.auth.currentUser?.id == uid) _applySentDeed(d);
+    });
+    if (Supabase.instance.client.auth.currentUser?.id != uid) return;
+    if (result.rejected.isNotEmpty) queueNotice = OfflineLines.rejectedOnSend;
+    if (result.networkError) isOffline = true;
+    if (result.sent.isNotEmpty) _applyBadgeUpdate();
+    notifyListeners();
+  }
+
+  // A waiting deed the server now has: it becomes a normal deed, and if approved its points are
+  // confirmed (the server-side points write already happened in afterInsert).
+  void _applySentDeed(QueuedDeed d) {
+    final pts = deedCatalog[d.type]?.points ?? d.points;
+    final status = d.deedStatus ?? 'pending';
+    deedsLog.add(DeedLogEntry(id: d.deedId, type: d.type, points: pts, day: simDay, createdAt: DateTime.now(), status: status, campaignId: d.campaignId));
+    if (status == 'approved') {
+      user.points += pts;
+      if (user.lastLogDay != simDay) {
+        user.streak += 1;
+        user.lastLogDay = simDay;
+      }
+    }
+  }
+
+  // Same approve/moderate rules as an online submit, evaluated when the deed is sent. GPS is what
+  // was captured when the deed was done (none = location not shared or capture failed).
+  ({String status, String reason}) _queuedDeedDecision(QueuedDeed d) {
+    final repeat = countTodayByType(d.type) >= 2;
+    final gpsFailed = d.gpsLat == null || d.gpsLng == null;
+    final isDonation = donationDeedTypes.contains(d.type);
+    final flag = repeat || gpsFailed || isDonation || d.afterDuplicate;
+    final reasons = deedModerationReasons(repeat: repeat, shareLocation: d.shareLocation, gpsFailed: gpsFailed, isDonation: isDonation, afterDuplicate: d.afterDuplicate);
+    return (status: flag ? 'pending' : 'approved', reason: reasons.join(' '));
+  }
+
+  // Saves a deed on the phone. Same checks as online, done locally: cooldown (waiting deeds
+  // included), metadata stripped BEFORE the photo is stored, the same photo can't wait twice,
+  // GPS captured now with the same consent. cooldownChecked/position/uploadedPhotoPath: an online
+  // submit that lost its connection part-way hands over what it already did.
+  Future<SubmitResult> _queueDeed(
+    String type,
+    Map<String, String> details, {
+    Uint8List? photoBytes,
+    String? campaignId,
+    required bool shareLocation,
+    required bool afterDuplicate,
+    bool cooldownChecked = false,
+    Position? position,
+    bool positionKnown = false,
+    String? uploadedPhotoPath,
+  }) async {
+    const nothing = <int>[];
+    final uid = Supabase.instance.client.auth.currentUser?.id;
+    final meta = deedCatalog[type];
+    if (uid == null || meta == null) return const SubmitResult(flagged: false, leveledUpTier: null, newMilestones: nothing, saveFailed: true);
+    await _loadQueueFor(uid);
+    if (!cooldownChecked && cooldownRemaining(type) > Duration.zero) {
+      return const SubmitResult(flagged: false, leveledUpTier: null, newMilestones: nothing, blockedByCooldown: true);
+    }
+    if (deedQueue.isFull) return const SubmitResult(flagged: false, leveledUpTier: null, newMilestones: nothing, queueFull: true);
+
+    PreparedDeedPhoto? photo;
+    var photoPath = uploadedPhotoPath;
+    if (photoPath == null && photoBytes != null) {
+      photo = await prepareDeedPhoto(uid, photoBytes); // strips EXIF/XMP; null = can't be cleaned, never stored
+      photoPath = photo?.path;
+    }
+    if (photoPath != null && deedQueue.hasPhoto(photoPath)) {
+      return const SubmitResult(flagged: false, leveledUpTier: null, newMilestones: nothing, duplicatePhoto: true);
+    }
+    final pos = positionKnown ? position : (shareLocation ? await _attemptGpsCapture() : null);
+    final deed = QueuedDeed(
+      id: 'q${DateTime.now().microsecondsSinceEpoch}',
+      uid: uid,
+      type: type,
+      details: Map.of(details),
+      campaignId: campaignId,
+      shareLocation: shareLocation,
+      afterDuplicate: afterDuplicate,
+      gpsLat: pos?.latitude,
+      gpsLng: pos?.longitude,
+      queuedAt: DateTime.now(),
+      points: meta.points,
+      photoPath: photoPath,
+      photoOnServer: uploadedPhotoPath != null,
+      stage: uploadedPhotoPath != null ? QueueStage.photoUploaded : QueueStage.queued,
+    );
+    final QueueAddResult added;
+    try {
+      added = await deedQueue.add(deed, cleanPhoto: photo?.bytes, photoExtension: photo?.extension);
+    } catch (_) {
+      return const SubmitResult(flagged: false, leveledUpTier: null, newMilestones: nothing, saveFailed: true);
+    }
+    if (added == QueueAddResult.full) return const SubmitResult(flagged: false, leveledUpTier: null, newMilestones: nothing, queueFull: true);
+    if (added == QueueAddResult.duplicatePhoto) return const SubmitResult(flagged: false, leveledUpTier: null, newMilestones: nothing, duplicatePhoto: true);
+    lastLoggedAt[type] = deed.queuedAt; // cooldown starts now, as for an online deed
+    notifyListeners();
+    _scheduleSync();
+    return const SubmitResult(flagged: false, leveledUpTier: null, newMilestones: nothing, queued: true);
+  }
+
+  // Sign-out: the queue, its photos and the Home cache are deleted from the phone.
+  Future<void> wipeOfflineData() async {
+    _syncTimer?.cancel();
+    _syncTimer = null;
+    isOffline = false;
+    queueNotice = null;
+    try {
+      await deedQueue.wipe();
+    } catch (_) {}
+    try {
+      await homeCache.clear();
+    } catch (_) {}
+  }
+
   // Called once, right after Profile Setup completes for a brand-new user — creates their row
   // in Supabase to match what completeSetup() just did locally.
   // Real bug fixed here: this had no error handling at all. If this insert failed for any
@@ -1764,6 +2074,65 @@ class AppState extends ChangeNotifier {
       return null;
     } catch (e) {
       return 'Could not submit your request: ${e.toString()}';
+    }
+  }
+}
+
+// The offline queue's network steps, against Supabase — the same tables, columns and rules as
+// an online submit (submitPhotoDeed). See deed_queue.dart for the order and crash safety.
+class _SupabaseDeedSendOps implements DeedSendOps {
+  final AppState app;
+  final String uid;
+  _SupabaseDeedSendOps(this.app, this.uid);
+
+  SupabaseClient get _client => Supabase.instance.client;
+
+  @override
+  Future<PhotoUploadResult> uploadPhoto(String path, Uint8List bytes) => uploadPreparedDeedPhoto(
+        path,
+        bytes,
+        upload: (p, b) => _client.storage.from('deed-photos').uploadBinary(p, b, fileOptions: const FileOptions(upsert: false)),
+        deedUsesPhoto: (p) async => (await _client.from('deeds').select('id').eq('user_id', uid).eq('photo_url', p).limit(1)).isNotEmpty,
+      );
+
+  @override
+  Future<({String id, String status})?> findDeedByPhoto(String photoPath) async {
+    final rows = await _client.from('deeds').select('id, status').eq('user_id', uid).eq('photo_url', photoPath).limit(1);
+    if (rows.isEmpty) return null;
+    return (id: rows.first['id'] as String, status: rows.first['status'] as String);
+  }
+
+  @override
+  Future<({String id, String status, String? reason})> insertDeed(QueuedDeed deed) async {
+    final decision = app._queuedDeedDecision(deed);
+    final row = await _client.from('deeds').insert({
+      'user_id': uid,
+      'type': deed.type,
+      'points': deedCatalog[deed.type]?.points ?? deed.points,
+      'status': decision.status,
+      'photo_url': deed.photoOnServer ? deed.photoPath : null,
+      'gps_lat': deed.gpsLat,
+      'gps_lng': deed.gpsLng,
+      'campaign_id': deed.campaignId,
+      // created_at is left to the server: the send time is what counts.
+    }).select('id, status').single();
+    return (id: row['id'] as String, status: row['status'] as String, reason: decision.reason);
+  }
+
+  @override
+  Future<void> afterInsert(QueuedDeed deed) async {
+    try {
+      if (deed.deedStatus == 'pending') {
+        await _client.from('moderation_queue').insert({'deed_id': deed.deedId, 'reason': deed.reason ?? app._queuedDeedDecision(deed).reason});
+      } else {
+        final pts = deedCatalog[deed.type]?.points ?? deed.points;
+        await _client.from('profiles').update({
+          'points': app.user.points + pts,
+          'last_points_activity': DateTime.now().toIso8601String(),
+        }).eq('id', uid);
+      }
+    } catch (_) {
+      // Best-effort, same as the online path.
     }
   }
 }
