@@ -9,8 +9,8 @@ Map<String, dynamic> respondToInviteParams(String inviteId, {required bool accep
       'p_response': accept ? 'accepted' : 'declined',
     };
 
-// Invite types that are answered in the app. co_create keeps its old flow (no buttons).
-const answerableInviteTypes = {'karocast', 'town_voice', 'service_call'};
+// Invite types that are answered in the app (all four current types).
+const answerableInviteTypes = {'karocast', 'town_voice', 'service_call', 'co_create'};
 
 bool inviteNeedsAnswer(String inviteType, String? response) => answerableInviteTypes.contains(inviteType) && response == null;
 

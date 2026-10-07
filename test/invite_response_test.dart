@@ -11,13 +11,12 @@ void main() {
     expect(respondToInviteParams('inv-1', accept: false), {'p_invite_id': 'inv-1', 'p_response': 'declined'});
   });
 
-  test('karocast, town_voice and service_call are answered in the app; co_create is not', () {
-    for (final t in ['karocast', 'town_voice', 'service_call']) {
+  test('karocast, town_voice, service_call and co_create are answered in the app', () {
+    for (final t in ['karocast', 'town_voice', 'service_call', 'co_create']) {
       expect(inviteNeedsAnswer(t, null), isTrue, reason: t);
       expect(inviteNeedsAnswer(t, 'accepted'), isFalse, reason: '$t already answered');
       expect(inviteNeedsAnswer(t, 'declined'), isFalse, reason: '$t already answered');
     }
-    expect(inviteNeedsAnswer('co_create', null), isFalse);
     expect(inviteNeedsAnswer('something_new', null), isFalse);
   });
 

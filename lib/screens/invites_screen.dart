@@ -301,7 +301,7 @@ class _InvitesScreenState extends State<InvitesScreen> {
                                               ),
                                             ),
                                           ],
-                                          // Accept / Decline (karocast, town_voice, service_call), or the saved answer.
+                                          // Accept / Decline (all answerable types, see invite_response.dart), or the saved answer.
                                           if (inviteNeedsAnswer(invite.inviteType, invite.response) || invite.response != null) ...[
                                             const SizedBox(height: 12),
                                             _answerArea(invite),
