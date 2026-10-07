@@ -55,6 +55,11 @@ class _GuddiLoadingState extends State<GuddiLoading> {
     super.dispose();
   }
 
+  // Guddi is the whole screen here, so she's drawn big: about a third of the screen height (was a
+  // fixed 150). Capped at 240, and never below the old 150, so a short phone still has room
+  // for the lines and the Retry button under her. The poses are 720 px tall, so she stays sharp.
+  static double _guddiHeight(BuildContext context) => (MediaQuery.sizeOf(context).height * 0.34).clamp(150.0, 240.0);
+
   @override
   Widget build(BuildContext context) {
     if (widget.onRetry != null) return _offline(widget.onRetry!);
@@ -64,7 +69,7 @@ class _GuddiLoadingState extends State<GuddiLoading> {
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16),
         child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Image.asset(GuddiPoses.smile, height: 150, fit: BoxFit.contain),
+          Image.asset(GuddiPoses.smile, height: _guddiHeight(context), fit: BoxFit.contain),
           const SizedBox(height: 18),
           Semantics(
             liveRegion: true,
@@ -109,7 +114,7 @@ class _GuddiLoadingState extends State<GuddiLoading> {
               colors: [Colors.white, Colors.white, Colors.transparent],
               stops: [0, 0.6, 1],
             ).createShader(rect),
-            child: Image.asset(GuddiPoses.worried, height: 150, fit: BoxFit.contain),
+            child: Image.asset(GuddiPoses.worried, height: _guddiHeight(context), fit: BoxFit.contain),
           ),
           const SizedBox(height: 18),
           Semantics(

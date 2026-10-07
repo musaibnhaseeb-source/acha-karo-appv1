@@ -84,7 +84,9 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
-  for (final size in const [Size(320, 568), Size(412, 915)]) {
+  // Small phones included (320 wide, and a short 480 tall screen), for both the loading and the
+  // offline state, at the largest in-app text size.
+  for (final size in const [Size(320, 480), Size(320, 568), Size(360, 640), Size(412, 915)]) {
     testWidgets('no overflow at ${size.width.toInt()}x${size.height.toInt()} @1.15x', (tester) async {
       ignoreFontErrors();
       tester.view.physicalSize = size;
@@ -93,7 +95,21 @@ void main() {
       await tester.pumpWidget(_host(const GuddiLoading(returning: true), size: size, scale: 1.15));
       await tester.pump(const Duration(seconds: 5)); // longest line variant
       expect(tester.takeException(), isNull);
+      await tester.pumpWidget(_host(GuddiLoading(returning: true, onRetry: () {}), size: size, scale: 1.15));
+      expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox());
     });
   }
+
+  testWidgets('Guddi is drawn bigger than the old 150, capped at 240', (tester) async {
+    ignoreFontErrors();
+    double guddiHeight() => tester.widget<Image>(find.byType(Image)).height!;
+    await tester.pumpWidget(_host(const GuddiLoading(returning: true), size: const Size(360, 640)));
+    expect(guddiHeight(), greaterThan(200));
+    await tester.pumpWidget(_host(const GuddiLoading(returning: true), size: const Size(412, 915)));
+    expect(guddiHeight(), 240);
+    await tester.pumpWidget(_host(GuddiLoading(returning: true, onRetry: () {}), size: const Size(412, 915)));
+    expect(guddiHeight(), 240);
+    await tester.pumpWidget(const SizedBox());
+  });
 }
