@@ -97,9 +97,11 @@ final List<BadgeDef> badgeDefs = [
   BadgeDef(id: 'healthChampion', name: 'Health Champion', icon: '🏥', req: '5 clinic clean-ups', tier: 'gold', category: 'health', check: (s) => countType(s, 'cleanClinic') >= 5),
   // townVoiceWins is never actually incremented anywhere in the original or here — stays honestly locked.
   BadgeDef(id: 'townVoiceWinner', name: 'Town Voice Winner', icon: '🎙️', req: 'Win Town Voice', tier: 'platinum', category: 'special', check: (s) => (s.townVoiceWins) >= 1),
-  BadgeDef(id: 'advisor', name: 'Advisor', icon: '📣', req: 'Submit 3 feedbacks', tier: 'gold', category: 'special', check: (s) => s.feedback.length >= 3),
+  BadgeDef(id: 'advisor', name: 'Advisor', icon: '📣', req: 'Submit 3 feedbacks', tier: 'gold', category: 'special', check: (s) => s.feedbackLoaded ? s.feedback.length >= 3 : s.user.badges.contains('advisor')),
   BadgeDef(id: 'mentor', name: 'Mentor', icon: '🌟', req: 'Teach 10 skills', tier: 'platinum', category: 'special', check: (s) => countType(s, 'teachSkill') >= 10),
   BadgeDef(id: 'allRounder', name: 'All-Rounder', icon: '🎯', req: 'Do deeds in all 5 categories', tier: 'rainbow', category: 'special', check: (s) => allCategoriesTouched(s)),
+  // Advisor (above) works the same way: feedback loads in the background after Home, so until it
+  // has, a held Advisor badge is kept instead of being dropped on every cold start.
   // Rank badges only trust a rank once real leaderboard data has loaded (see
   // AppState.rankDataReady). Until then they just keep whatever the user already holds —
   // never newly granted from an empty/failed load, and never dropped for lack of data either.

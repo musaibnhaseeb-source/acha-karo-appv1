@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart' show Color;
+import 'dart:async';
 import 'dart:io';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -12,6 +13,7 @@ import '../utils/notifications.dart';
 import '../data/remote_config.dart';
 import '../utils/app_version.dart';
 import '../utils/deed_photo_upload.dart';
+import 'home_data.dart';
 
 const Duration cooldownDuration = Duration(hours: 1); // same 1hr cooldown as the original
 
@@ -245,6 +247,9 @@ class AppState extends ChangeNotifier {
     } catch (_) {}
   }
   List<FeedbackEntry> feedback = [];
+  // True once this account's feedback history has actually loaded. Until then the Advisor badge
+  // keeps whatever is held rather than judging an empty, not-yet-loaded list (badges.dart).
+  bool feedbackLoaded = false;
 
   // Real write now — was purely local before, meaning feedback vanished the moment the app
   // closed. Local state still updates immediately either way (optimistic), same "don't block on
@@ -305,6 +310,9 @@ class AppState extends ChangeNotifier {
   // already sitting in remoteConfig if this fails, rather than showing nothing.
   // New — real app-update notification state. Null means nothing to show.
   Map<String, dynamic>? pendingUpdate;
+  // joined_at + last_acked_update_id from the last profile load (see applyHomeData), so
+  // checkForUpdate() doesn't need its own profiles read.
+  Map<String, dynamic>? _updateCheckProfile;
 
   Future<void> checkForUpdate() async {
     try {
@@ -319,7 +327,8 @@ class AppState extends ChangeNotifier {
       final rowLabel = (updateRow['version_label'] as String? ?? '').trim().toLowerCase();
       if (rowLabel == kAppVersionLabel.toLowerCase()) return;
 
-      final profileRow = await Supabase.instance.client.from('profiles').select('joined_at, last_acked_update_id').eq('id', uid).maybeSingle();
+      // The startup load already read these two columns; only re-query if it hasn't run.
+      final profileRow = _updateCheckProfile ?? await Supabase.instance.client.from('profiles').select('joined_at, last_acked_update_id').eq('id', uid).maybeSingle();
       if (profileRow == null) return;
 
       // A genuinely new joiner, downloading after this update already existed, is already on
@@ -343,6 +352,7 @@ class AppState extends ChangeNotifier {
     final updateId = pendingUpdate?['id'];
     if (uid == null || updateId == null) return;
     pendingUpdate = null;
+    _updateCheckProfile?['last_acked_update_id'] = updateId;
     notifyListeners();
     try {
       await Supabase.instance.client.from('profiles').update({'last_acked_update_id': updateId}).eq('id', uid);
@@ -352,10 +362,18 @@ class AppState extends ChangeNotifier {
     }
   }
 
+  // When loadRemoteConfig() last succeeded — lets resume skip a refresh that just happened.
+  DateTime? remoteConfigLoadedAt;
+
   Future<void> loadRemoteConfig() async {
-    await _loadFrozenBadgeIds();
     try {
-      final campaignRows = await Supabase.instance.client.from('campaigns').select();
+      // The three reads don't depend on each other, so they go out together (one round trip,
+      // not three). The frozen-badge read swallows its own errors.
+      final (_, campaignRows, configRows) = await (
+        _loadFrozenBadgeIds(),
+        Supabase.instance.client.from('campaigns').select(),
+        Supabase.instance.client.from('app_config').select().limit(1),
+      ).wait;
       final campaigns = campaignRows.map<Campaign>((c) => Campaign(
             id: c['id'] as String,
             title: c['title'] as String,
@@ -384,7 +402,6 @@ class AppState extends ChangeNotifier {
 
       var townVoice = remoteConfig.townVoice;
       var weeklyLeaderboardActive = remoteConfig.weeklyLeaderboardActive;
-      final configRows = await Supabase.instance.client.from('app_config').select().limit(1);
       if (configRows.isNotEmpty) {
         final row = configRows.first;
         townVoice = TownVoiceConfig(
@@ -398,6 +415,7 @@ class AppState extends ChangeNotifier {
       }
 
       remoteConfig = RemoteConfig(townVoice: townVoice, campaigns: campaigns, weeklyLeaderboardActive: weeklyLeaderboardActive);
+      remoteConfigLoadedAt = DateTime.now();
       notifyListeners();
     } catch (_) {
       // Stays on the local defaults already set — better than showing nothing.
@@ -693,8 +711,14 @@ class AppState extends ChangeNotifier {
 
   Future<void> loadLeaderboard() async {
     try {
-      final profileRows = await Supabase.instance.client.rpc('get_public_profiles') as List<dynamic>;
-      final badgeRows = await Supabase.instance.client.from('user_badges').select('user_id');
+      // All three reads go out together (one round trip, not three).
+      final (profilesRaw, badgeRows, weeklyRaw) = await (
+        Supabase.instance.client.rpc('get_public_profiles'),
+        Supabase.instance.client.from('user_badges').select('user_id'),
+        Supabase.instance.client.rpc('get_weekly_leaderboard'),
+      ).wait;
+      final profileRows = profilesRaw as List<dynamic>;
+      final weeklyRows = weeklyRaw as List<dynamic>;
       final badgeCounts = <String, int>{};
       for (final b in badgeRows) {
         final uid = b['user_id'] as String;
@@ -712,7 +736,6 @@ class AppState extends ChangeNotifier {
       // Real weekly data now — was the mock-duplicate-of-All-Time placeholder before. Reuses
       // the same RealLeaderboardEntry model; badgeCount doesn't have a clean per-week meaning,
       // left at 0 for these entries (only affects which tier icon shows next to weekly rows).
-      final weeklyRows = await Supabase.instance.client.rpc('get_weekly_leaderboard') as List<dynamic>;
       weeklyLeaderboard = weeklyRows.map<RealLeaderboardEntry>((r) => RealLeaderboardEntry(
             id: r['user_id'] as String,
             // Your own weekly row keeps your name as you typed it; everyone else is "First L."
@@ -742,6 +765,8 @@ class AppState extends ChangeNotifier {
   // profiles here too (assigner_id, assignee_id), same ambiguity risk as friendships/feedback —
   // fetched separately per direction and joined in Dart rather than an embedded select, for the
   // same reason those were fixed that way.
+  // Not called in this build (no Friends UI entry point) — see tryLoadExistingProfile.
+  // ignore: unused_element
   Future<void> _loadAssignedDeeds(String uid) async {
     try {
       final byMeRows = await Supabase.instance.client.from('assigned_deeds').select().eq('assigner_id', uid);
@@ -1041,13 +1066,11 @@ class AppState extends ChangeNotifier {
     final meta = deedCatalog[type];
     if (meta == null) return SubmitResult(flagged: false, leveledUpTier: null, newMilestones: []);
 
-    // Real fix here: a genuine, confirmed case where briefly toggling a campaign active (even
-    // for a moment) could leave its shortened cooldown override lingering for anyone whose app
-    // was already open at that exact moment — since remoteConfig only otherwise refreshes on
-    // cold start or app resume, not right before this actually matters. Re-fetched here, right
-    // before the real cooldown check, so this always uses genuinely current campaign state
-    // rather than whatever was cached from an earlier point in the session.
-    await loadRemoteConfig();
+    // Campaign state (a campaign's cooldown override) is refreshed here so a campaign toggled
+    // while the app was open doesn't linger. It used to be awaited, which put ~1 s of network in
+    // front of every submit; now the cooldown check below uses the config already loaded (cold
+    // start / resume / pull-to-refresh) and the refresh lands in the background for next time.
+    unawaited(loadRemoteConfig());
 
     // Real bug fixed here: this never actually checked cooldown at all — every bit of
     // enforcement lived purely in the UI (greyed-out, disabled tiles). That's exactly the kind
@@ -1456,6 +1479,9 @@ class AppState extends ChangeNotifier {
     moderationQueue = [];
     lastLoggedAt = {};
     feedback = [];
+    feedbackLoaded = false;
+    profileLoadedAt = null;
+    _updateCheckProfile = null;
     notifications = [];
     friends = [];
     pendingFriendRequests = [];
@@ -1464,12 +1490,38 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<bool> tryLoadExistingProfile() async {
+  // When a profile load last succeeded. Resume uses it to skip a reload that just happened
+  // (see main.dart).
+  DateTime? profileLoadedAt;
+
+  // Cold start, resume, pull-to-refresh and the screens that need fresh points all come through
+  // here. Returns true if a profile was found (returning user, skip Setup), false if not.
+  //
+  // It used to await ~15 queries one after another (~6 s to the Tokyo database). Now:
+  // - Wave 1 (HomeData.fetch): everything Home shows, all at once in one round trip. This
+  //   returns as soon as it is applied, so Home renders without waiting for anything else.
+  // - Wave 2 (_loadBackgroundData): leaderboard, feedback, notifications, in the background
+  //   after that. Pass awaitBackground to wait for it too (pull-to-refresh does).
+  // Friends, pending requests and assigned deeds aren't loaded: the Friends UI has no entry
+  // point in this build. Their loaders (loadPendingFriendRequests, _loadAssignedDeeds,
+  // _loadFriends) are kept for when it comes back.
+  Future<bool> tryLoadExistingProfile({bool awaitBackground = false}) async {
     final uid = Supabase.instance.client.auth.currentUser?.id;
     if (uid == null) return false;
-    final rows = await Supabase.instance.client.from('profiles').select().eq('id', uid).limit(1);
-    if (rows.isEmpty) return false;
-    final row = rows.first;
+    final data = await HomeData.fetch(Supabase.instance.client, uid);
+    if (data == null) return false;
+    // Signed out (or switched account) while this was in flight: never apply that data.
+    if (Supabase.instance.client.auth.currentUser?.id != uid) return false;
+    applyHomeData(data);
+    final background = _loadBackgroundData(uid);
+    if (awaitBackground) await background;
+    return true;
+  }
+
+  // Wave 1 into app state. Only the profile is guaranteed; any other read that failed (null)
+  // leaves what was already loaded, same as when these were separate try/catch blocks.
+  void applyHomeData(HomeData data) {
+    final row = data.profile;
     user.name = row['name'] as String? ?? user.name;
     user.email = row['email'] as String?;
     user.phone = row['phone'] as String?;
@@ -1480,35 +1532,34 @@ class AppState extends ChangeNotifier {
     // broken, since nothing would ever read it back on the next session.
     wallpaperSwatchIndex = row['wallpaper_swatch_index'] as int? ?? wallpaperSwatchIndex;
 
-    // Global equip is loaded separately via loadEquippedSkin(), called at profile level.
+    // Equipped skin comes with the profile row now (it used to be a second profiles read in
+    // loadEquippedSkin). PostgREST can return the to-one embed as an object or a one-item list.
+    final rawSkin = row['vehicle_skins'];
+    final skin = rawSkin is List ? (rawSkin.isNotEmpty ? rawSkin.first as Map<String, dynamic> : null) : rawSkin as Map<String, dynamic>?;
+    equippedSkinId = row['active_skin_id'] as String?;
+    equippedSkinIcon = skin?['icon'] as String?;
+    _updateCheckProfile = {'joined_at': row['joined_at'], 'last_acked_update_id': row['last_acked_update_id']};
 
-    // New — which campaigns this user has fully completed, for the Home tick mark. Loaded here
-    // (once, with everything else) rather than per-campaign-card, since Home shows all active
-    // campaigns at once and needs this for each of them.
-    try {
-      final completedRows = await Supabase.instance.client.from('hall_of_fame_claims').select('campaign_id').eq('user_id', uid);
-      completedCampaignIds = completedRows.map<String>((r) => r['campaign_id'] as String).toSet();
-    } catch (_) {
-      // Tick mark just won't show yet if this fails — doesn't block anything else.
-    }
+    // Which campaigns this user has fully completed, for the Home tick mark.
+    final hofRows = data.hallOfFameClaims;
+    if (hofRows != null) completedCampaignIds = hofRows.map<String>((r) => r['campaign_id'] as String).toSet();
 
-    // Load real deed history too — was missing before, which meant a returning user's badges,
-    // cooldowns, and daily-milestone progress would all silently reset to nothing every time
-    // they reopened the app, even though their points correctly persisted. Badges/tiers don't
-    // need their own separate sync — they're computed locally from this same deed history via
-    // _applyBadgeUpdate(), same as they always were.
-    try {
-      final deedRows = await Supabase.instance.client.from('deeds').select().eq('user_id', uid).order('created_at');
+    // Real membership number — the table's RLS only ever returns your own row.
+    final membershipRows = data.membership;
+    if (membershipRows != null) membershipNumber = membershipRows.isNotEmpty ? membershipRows.first['membership_number'] as String? : null;
+
+    // A failed read keeps the last known set (empty on first load, i.e. nothing frozen).
+    final frozenRows = data.frozenBadges;
+    if (frozenRows != null) _frozenBadgeIds = frozenRows.map<String>((r) => r['id'] as String).toSet();
+
+    // Real deed history — without it a returning user's badges, cooldowns and daily-milestone
+    // progress would reset every time they reopened the app. If it fails, the person still gets
+    // in with their profile basics; deeds/badges catch up on the next successful load.
+    final deedRows = data.deeds;
+    if (deedRows != null) {
+      // day stays 0 deliberately: loaded history never counts toward this session's simDay-based
+      // progress. createdAt is what real calendar filtering (Today / This Week) uses.
       deedsLog = deedRows.map<DeedLogEntry>((d) {
-        // day stays 0 deliberately — this is the correct, intentional fix from before (loaded
-        // history never counts toward THIS session's fresh milestone/cooldown progress, since
-        // simDay is a purely local testing counter with no real relationship to calendar dates).
-        // createdAt is the NEW, separate fix: real bug found — Achievements' "Today"/"This Week"
-        // filtering was ALSO using this same simDay-based day field, so once a deed's day got set
-        // to 0 for the milestone fix, it silently vanished from Achievements too, even though it
-        // genuinely happened today. Real calendar-date filtering (via createdAt below) is
-        // independent of the simDay hack entirely, so both concerns are now correctly separated
-        // instead of one field trying to serve two different, incompatible purposes.
         final createdAt = DateTime.tryParse(d['created_at'] as String? ?? '') ?? DateTime.now();
         return DeedLogEntry(
           id: d['id'] as String?,
@@ -1533,44 +1584,35 @@ class AppState extends ChangeNotifier {
         if (existing == null || createdAt.isAfter(existing)) lastLoggedAt[type] = createdAt;
       }
 
-      // Load already-known badges first, so _applyBadgeUpdate() below has the correct baseline
-      // to diff against — without this, every badge would look "newly unlocked" on every single
-      // app restart (since local state always starts empty), triggering pointless repeat writes
-      // to user_badges every time, not just genuinely new unlocks.
-      try {
-        final badgeRows = await Supabase.instance.client.from('user_badges').select('badge_id').eq('user_id', uid);
-        user.badges = badgeRows.map<String>((b) => b['badge_id'] as String).toList();
-      } catch (_) {
-        // Falls through to full local recomputation below regardless.
-      }
+      // Already-held badges are the baseline _applyBadgeUpdate() diffs against — without it
+      // every badge would look newly unlocked (and be re-written) on every restart. If that read
+      // failed, it falls through to a full local recompute.
+      final badgeRows = data.badges;
+      if (badgeRows != null) user.badges = badgeRows.map<String>((b) => b['badge_id'] as String).toList();
 
-      await _loadFrozenBadgeIds();
-      _applyBadgeUpdate(); // recompute badges/tier from the real history just loaded
-    } catch (_) {
-      // Deed history failing to load shouldn't block sign-in entirely — the person still gets
-      // into the app with at least their profile basics; deeds/badges just won't reflect history
-      // until the next successful load. Known gap, same reasoning as the submission-side writes.
+      // Badges whose inputs arrive in wave 2 (rank, Advisor) keep what's held until then.
+      _applyBadgeUpdate();
     }
 
-    // Real load now — was mock data this whole time, never connected.
-    await _loadAssignedDeeds(uid);
-    // Real leaderboard data — needed before Home renders "you're ranked #X", since that now
-    // depends on this being loaded rather than a hardcoded mock list.
-    await loadLeaderboard();
+    profileLoadedAt = DateTime.now();
+    notifyListeners();
+  }
 
-    // Real membership number fetch — table's RLS already guarantees this only ever returns
-    // your own row, regardless of what's queried.
-    try {
-      final rows = await Supabase.instance.client.from('membership_numbers').select('membership_number').eq('user_id', uid).limit(1);
-      membershipNumber = rows.isNotEmpty ? rows.first['membership_number'] as String? : null;
-    } catch (_) {
-      // Doesn't block sign-in — just won't show until the next successful load.
-    }
+  // Wave 2: what Home doesn't need for its first frame. The three loads run together and each
+  // swallows its own errors; badges are recomputed once their rank and feedback inputs are in.
+  Future<void> _loadBackgroundData(String uid) async {
+    await (loadLeaderboard(), _loadFeedback(uid), _loadNotifications(uid)).wait;
+    if (Supabase.instance.client.auth.currentUser?.id != uid) return;
+    _applyBadgeUpdate();
+    notifyListeners();
+  }
 
-    // Feedback history too — was previously lost entirely on every app reopen, including any
-    // moderator response that had already been given.
+  // Feedback history — was previously lost entirely on every app reopen, including any
+  // moderator response that had already been given.
+  Future<void> _loadFeedback(String uid) async {
     try {
       final feedbackRows = await Supabase.instance.client.from('feedback').select().eq('user_id', uid).order('created_at', ascending: false);
+      if (Supabase.instance.client.auth.currentUser?.id != uid) return;
       feedback = feedbackRows.map<FeedbackEntry>((f) => FeedbackEntry(
             id: f['id'] as String?,
             stars: f['stars'] as int,
@@ -1579,14 +1621,45 @@ class AppState extends ChangeNotifier {
             responded: f['responded'] as bool? ?? false,
             response: f['response'] as String?,
           )).toList();
+      feedbackLoaded = true;
     } catch (_) {
-      // Same reasoning — doesn't block sign-in.
+      // Doesn't block anything — Contact just shows what it already had.
     }
+  }
 
-    // Real bug fixed here: friendships were never loaded from Supabase at all — a friend
-    // connection created via redeeming an invite code was only ever visible in whichever
-    // session it happened in. Neither the redeemer nor the issuer would see it again after
-    // reopening the app, on either side. Fixed by actually fetching it now.
+  // Newest 50 notifications (the list never needed the whole history).
+  Future<void> _loadNotifications(String uid) async {
+    try {
+      final notifRows = await Supabase.instance.client.from('notifications').select().eq('user_id', uid).order('created_at', ascending: false).limit(50);
+      if (Supabase.instance.client.auth.currentUser?.id != uid) return;
+      final previousIds = notifications.map((n) => n.id).toSet();
+      final loaded = notifRows.map<AppNotification>((n) => AppNotification(
+            id: n['id'] as String,
+            type: n['type'] as String,
+            title: n['title'] as String,
+            body: n['body'] as String,
+            day: simDay,
+            read: n['read'] as bool? ?? false,
+          )).toList();
+      // Real system notification (with sound) for anything genuinely new since the last load.
+      // Guarded by previousIds being non-empty so the first load of existing history doesn't
+      // fire one for every old notification.
+      if (previousIds.isNotEmpty) {
+        for (final n in loaded) {
+          if (!previousIds.contains(n.id)) {
+            showLocalNotification(title: n.title, body: n.body);
+          }
+        }
+      }
+      notifications = loaded;
+    } catch (_) {
+      // Doesn't block anything — same reasoning as above.
+    }
+  }
+
+  // Not called in this build (no Friends UI entry point) — see tryLoadExistingProfile.
+  // ignore: unused_element
+  Future<void> _loadFriends(String uid) async {
     try {
       final rows = await Supabase.instance.client
           .from('friendships')
@@ -1607,42 +1680,8 @@ class AppState extends ChangeNotifier {
         friends = [];
       }
     } catch (_) {
-      // Doesn't block sign-in — friends list just won't reflect real connections until the
-      // next successful load.
+      // Friends list just won't reflect real connections until the next successful load.
     }
-    await loadPendingFriendRequests();
-
-    // Real notifications too — was always an empty list before, since nothing ever loaded them
-    // and (separately) nothing could even write one, given the missing INSERT policy.
-    try {
-      final notifRows = await Supabase.instance.client.from('notifications').select().eq('user_id', uid).order('created_at', ascending: false);
-      final previousIds = notifications.map((n) => n.id).toSet();
-      final loaded = notifRows.map<AppNotification>((n) => AppNotification(
-            id: n['id'] as String,
-            type: n['type'] as String,
-            title: n['title'] as String,
-            body: n['body'] as String,
-            day: simDay,
-            read: n['read'] as bool? ?? false,
-          )).toList();
-      // New — real system notification (with sound) for anything that's genuinely new since the
-      // last load, not just the in-app list updating silently. Guarded by previousIds being
-      // non-empty so this doesn't fire once for every notification the very first time someone
-      // ever loads their profile (which would just be existing history, not something new).
-      if (previousIds.isNotEmpty) {
-        for (final n in loaded) {
-          if (!previousIds.contains(n.id)) {
-            showLocalNotification(title: n.title, body: n.body);
-          }
-        }
-      }
-      notifications = loaded;
-    } catch (_) {
-      // Doesn't block sign-in — same reasoning as above.
-    }
-
-    notifyListeners();
-    return true;
   }
 
   // Called once, right after Profile Setup completes for a brand-new user — creates their row

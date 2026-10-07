@@ -171,16 +171,28 @@ class _RootScreenState extends State<RootScreen> with WidgetsBindingObserver {
       // needs to actually run here too, not just tryLoadExistingProfile(), or a disabled
       // campaign would keep showing after resuming from background just like it did before.
       final appStateObj = context.read<AppState>();
-      // Every app open also rebuilds the daily-reminder schedule (which resets its back-off).
-      appStateObj.tryLoadExistingProfile().then(
-        (found) {
-          if (found) DailyReminder.reschedule(loggedToday: appStateObj.loggedDeedToday);
-        },
-        onError: (_) {}, // offline resume — keep what's on screen
-      );
-      appStateObj.loadRemoteConfig();
+      // Throttled: Android resumes the app after every camera/gallery pick and quick app switch,
+      // and each one used to re-run the whole load. Within _resumeRefreshInterval of the last
+      // successful load, what's on screen is kept.
+      if (_isStale(appStateObj.profileLoadedAt)) {
+        // Every app open also rebuilds the daily-reminder schedule (which resets its back-off).
+        appStateObj.tryLoadExistingProfile().then(
+          (found) {
+            if (found) DailyReminder.reschedule(loggedToday: appStateObj.loggedDeedToday);
+          },
+          onError: (_) {}, // offline resume — keep what's on screen
+        );
+      } else {
+        DailyReminder.reschedule(loggedToday: appStateObj.loggedDeedToday);
+      }
+      if (_isStale(appStateObj.remoteConfigLoadedAt)) appStateObj.loadRemoteConfig();
     }
   }
+
+  // Minimum gap between resume-triggered reloads. Pull-to-refresh on Home always reloads.
+  static const _resumeRefreshInterval = Duration(seconds: 60);
+
+  bool _isStale(DateTime? loadedAt) => loadedAt == null || DateTime.now().difference(loadedAt) >= _resumeRefreshInterval;
 
   void _checkExistingSession() {
     final session = Supabase.instance.client.auth.currentSession;
@@ -217,9 +229,9 @@ class _RootScreenState extends State<RootScreen> with WidgetsBindingObserver {
     });
     // New — real update check, placed here specifically rather than earlier in initState(),
     // since a genuine, confirmed session is needed before this can do anything meaningful.
+    // (The equipped skin now comes with the profile load itself — no separate loadEquippedSkin.)
     if (found) {
       context.read<AppState>().checkForUpdate();
-      context.read<AppState>().loadEquippedSkin();
       DailyReminder.reschedule(loggedToday: context.read<AppState>().loggedDeedToday);
     }
   }
@@ -309,7 +321,6 @@ class _RootScreenState extends State<RootScreen> with WidgetsBindingObserver {
             setState(() => screen = found ? RootScreenState.app : RootScreenState.setup);
             if (found) {
               context.read<AppState>().checkForUpdate();
-              context.read<AppState>().loadEquippedSkin();
               DailyReminder.reschedule(loggedToday: context.read<AppState>().loggedDeedToday);
             }
           },

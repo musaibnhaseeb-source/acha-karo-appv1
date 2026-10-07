@@ -232,7 +232,8 @@ class _HomeScreenState extends State<HomeScreen> {
           // until a full app restart happened to re-trigger that one-time load. Both real data
           // sources refreshed together now, so "refresh" actually means what it says.
           onRefresh: () => Future.wait([
-            context.read<AppState>().tryLoadExistingProfile(),
+            // awaitBackground: the spinner stays until leaderboard/notifications are fresh too.
+            context.read<AppState>().tryLoadExistingProfile(awaitBackground: true),
             context.read<AppState>().loadRemoteConfig(),
           ]),
           child: SingleChildScrollView(
