@@ -76,7 +76,7 @@ class _RoadmapScreenState extends State<RoadmapScreen> {
 
       setState(() { stops = loadedStops; claimedStopIds = claimed; hallOfFameClaimed = hofClaimed; loadingStops = false; });
     } catch (e) {
-      setState(() { loadError = 'Could not load this campaign\'s roadmap: ${e.toString()}'; loadingStops = false; });
+      setState(() { loadError = "Couldn't load this campaign's roadmap. Check your connection and try again."; loadingStops = false; });
     }
   }
 

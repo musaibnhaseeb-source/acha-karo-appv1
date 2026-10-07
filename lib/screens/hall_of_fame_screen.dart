@@ -61,7 +61,7 @@ class _HallOfFameScreenState extends State<HallOfFameScreen> {
       }
     } catch (e) {
       if (mounted) setState(() => _claiming = false);
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not complete this: ${e.toString()}')));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Couldn't complete this. Please try again.")));
     }
   }
 

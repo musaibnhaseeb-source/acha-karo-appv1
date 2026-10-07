@@ -59,7 +59,7 @@ class _LoginScreenState extends State<LoginScreen> {
             : 'Could not send the code: ${e.message}');
       }
     } catch (e) {
-      if (mounted) setState(() => error = 'Could not send the code. Check your connection and try again.\n\n${e.toString()}');
+      if (mounted) setState(() => error = 'Could not send the code. Check your connection and try again.');
     } finally {
       if (mounted) setState(() => sending = false);
     }

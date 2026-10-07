@@ -88,7 +88,7 @@ class _SkinsScreenState extends State<SkinsScreen> {
         loading = false;
       });
     } catch (e) {
-      setState(() { error = 'Could not load skins: ${e.toString()}'; loading = false; });
+      setState(() { error = "Couldn't load skins. Check your connection and try again."; loading = false; });
     }
   }
 
@@ -112,7 +112,7 @@ class _SkinsScreenState extends State<SkinsScreen> {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(result as String? ?? 'Could not complete purchase.')));
       }
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not complete purchase: ${e.toString()}')));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Couldn't complete the purchase. Please try again.")));
     }
   }
 
