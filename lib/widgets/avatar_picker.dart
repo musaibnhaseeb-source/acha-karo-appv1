@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import '../theme/app_theme.dart';
@@ -60,6 +61,17 @@ class AvatarPicker extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Web (PWA): the photo is device-only (a dart:io File, which doesn't exist in the browser),
+    // so it's simply not offered there — just the placeholder, nothing to tap.
+    if (kIsWeb) {
+      return Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(shape: BoxShape.circle, color: AppColors.oliveCardStrong, border: Border.all(color: AppColors.textSoft.withOpacity(0.35), width: 2)),
+        alignment: Alignment.center,
+        child: Text(placeholderEmoji, style: TextStyle(fontSize: size * 0.36)),
+      );
+    }
     return GestureDetector(
       onTap: () => _pick(context),
       child: Stack(clipBehavior: Clip.none, children: [

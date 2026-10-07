@@ -41,6 +41,7 @@ class _SubmitDeedModalState extends State<SubmitDeedModal> {
   // the rest of this form, so the next submission always goes to a moderator.
   bool duplicateShown = false;
   bool afterDuplicate = false;
+  bool webOfflineShown = false; // web only: "can't save offline in the browser" note
 
   Future<void> _pickPhoto() async {
     final picker = ImagePicker();
@@ -82,6 +83,14 @@ class _SubmitDeedModalState extends State<SubmitDeedModal> {
     final appState = context.read<AppState>();
     final result = await appState.submitPhotoDeed(widget.type, details, photoBytes: photoBytes, photoFileName: photoFileName, campaignId: widget.campaignId, shareLocation: share, afterDuplicate: afterDuplicate);
     if (!mounted) return;
+    // Web (PWA), no internet: nothing was saved. Keep the form (and photo) open to retry online.
+    if (result.offlineUnsupported) {
+      setState(() {
+        submitting = false;
+        webOfflineShown = true;
+      });
+      return;
+    }
     if (result.duplicatePhoto) {
       // Nothing was saved. Keep the form open, drop the photo and ask for a new one.
       setState(() {
@@ -235,6 +244,14 @@ class _SubmitDeedModalState extends State<SubmitDeedModal> {
                     key: const ValueKey('will-be-reviewed-note'),
                     pose: GuddiPoses.explain,
                     text: GuddiDuplicatePhotoLines.willBeReviewed.roman,
+                  ),
+                ],
+                if (webOfflineShown) ...[
+                  const SizedBox(height: 14),
+                  _GuddiNote(
+                    key: const ValueKey('web-offline-note'),
+                    pose: GuddiPoses.worried,
+                    text: '${OfflineLines.webNoOffline.roman}\n${OfflineLines.webNoOffline.en}',
                   ),
                 ],
                 const SizedBox(height: 18),

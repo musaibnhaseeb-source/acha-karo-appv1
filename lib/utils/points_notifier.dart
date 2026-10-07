@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../data/deed_catalog.dart';
 
@@ -118,6 +119,7 @@ class PointsNotifier {
 
   // Reads this account's marker, plans, saves the new marker, returns what to show.
   static Future<List<PhoneNotification>> process(String uid, List<Map<String, dynamic>> rows) async {
+    if (kIsWeb) return const []; // no phone notifications in the browser, so no marker either
     SharedPreferences prefs;
     try {
       prefs = await SharedPreferences.getInstance();

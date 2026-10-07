@@ -78,6 +78,11 @@ class OfflineLines {
     'Ek save kiya hua acha kaam register nahi ho saka: yeh photo pehle bhi use ho chuki thi.',
     "One saved deed couldn't be sent: that photo was already used.",
   );
+  // Web (PWA) only: the browser version doesn't save deeds offline. The form stays open.
+  static const webNoOffline = GuddiLine(
+    'Browser mein offline acha kaam save nahi hota. Internet on karke dobara submit karo.',
+    "The browser version can't save deeds offline. Submit again once you're online.",
+  );
   // Settings > Sign out, while deeds are still waiting. {n} = how many.
   static const signOutWarning = "{n} saved acha kaam haven't been sent yet. Signing out deletes them from this phone.";
 }

@@ -146,8 +146,9 @@ class _ActiveContent extends StatelessWidget {
               ),
               const SizedBox(height: 14),
               Row(children: [
-                // Only when there's a real start time still ahead (see TownVoiceReminder).
-                if (TownVoiceReminder.canRemind(tv)) ...[
+                // Only when there's a real start time still ahead (see TownVoiceReminder), and only
+                // in the Android app — the browser version has no local notifications.
+                if (TownVoiceReminder.supported && TownVoiceReminder.canRemind(tv)) ...[
                   Expanded(child: _NotifyMeButton(tv: tv)),
                   const SizedBox(width: 8),
                 ],

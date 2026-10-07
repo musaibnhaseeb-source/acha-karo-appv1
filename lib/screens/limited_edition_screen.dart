@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -75,7 +76,7 @@ class _LimitedEditionScreenState extends State<LimitedEditionScreen> {
       }
       setState(() { items = result; loading = false; });
     } catch (e) {
-      setState(() { error = 'Could not load your items: ${e.toString()}'; loading = false; });
+      if (mounted) setState(() { error = "Couldn't load your items. Check your connection and try again."; loading = false; });
     }
   }
 
@@ -91,6 +92,16 @@ class _LimitedEditionScreenState extends State<LimitedEditionScreen> {
   // the actual, genuinely platform-specific save.
   bool _downloading = false;
   Future<void> _downloadSticker(BuildContext context, String url, String name) async {
+    // Web (PWA): no gallery and no dart:io HttpClient in the browser — open the image in a new
+    // tab instead, where it can be saved from the browser's own menu.
+    if (kIsWeb) {
+      final uri = Uri.tryParse(url);
+      final opened = uri != null && await launchUrl(uri, webOnlyWindowName: '_blank');
+      if (!opened && context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Couldn't open the sticker. Please try again.")));
+      }
+      return;
+    }
     setState(() => _downloading = true);
     try {
       final client = HttpClient();
@@ -115,7 +126,7 @@ class _LimitedEditionScreenState extends State<LimitedEditionScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not save this sticker: ${e.toString()}')));
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Couldn't save this sticker. Please try again.")));
       }
     } finally {
       if (mounted) setState(() => _downloading = false);

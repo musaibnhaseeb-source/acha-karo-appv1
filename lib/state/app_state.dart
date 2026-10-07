@@ -92,7 +92,9 @@ class SubmitResult {
   final bool queued;
   final bool queueFull;
   final bool saveFailed;
-  const SubmitResult({required this.flagged, required this.leveledUpTier, required this.newMilestones, this.blockedByCooldown = false, this.duplicatePhoto = false, this.queued = false, this.queueFull = false, this.saveFailed = false});
+  // Web (PWA): offline deeds aren't saved in the browser at all; the form stays open to retry online.
+  final bool offlineUnsupported;
+  const SubmitResult({required this.flagged, required this.leveledUpTier, required this.newMilestones, this.blockedByCooldown = false, this.duplicatePhoto = false, this.queued = false, this.queueFull = false, this.saveFailed = false, this.offlineUnsupported = false});
 }
 
 // Why a submission goes to a moderator instead of being approved straight away. These strings
@@ -545,7 +547,7 @@ class AppState extends ChangeNotifier {
       notifyListeners();
       return null;
     } catch (e) {
-      return 'Could not equip this skin: ${e.toString()}';
+      return "Couldn't equip this skin. Please try again.";
     }
   }
 
@@ -559,7 +561,7 @@ class AppState extends ChangeNotifier {
       notifyListeners();
       return null;
     } catch (e) {
-      return 'Could not unequip: ${e.toString()}';
+      return "Couldn't unequip. Please try again.";
     }
   }
 
@@ -1778,7 +1780,13 @@ class AppState extends ChangeNotifier {
     }
   }
 
+  // Web (PWA): no offline queue and no Home cache. The browser has no app-private folder
+  // (path_provider has no web implementation), and photos + GPS must not sit in plain browser
+  // storage (localStorage/IndexedDB) — so on web nothing of either is ever written.
+  static const offlineStorageSupported = !kIsWeb;
+
   Future<void> _loadQueueFor(String uid) async {
+    if (!offlineStorageSupported) return;
     try {
       await deedQueue.loadFor(uid);
       mergeQueuedCooldowns();
@@ -1797,6 +1805,7 @@ class AppState extends ChangeNotifier {
   }
 
   void _saveHomeCache(String uid, HomeData data) {
+    if (!offlineStorageSupported) return;
     homeCache.save(uid, data).then((_) async {
       // Signed out while it was being written: don't leave it behind.
       if (Supabase.instance.client.auth.currentUser?.id != uid) await homeCache.clear();
@@ -1806,6 +1815,7 @@ class AppState extends ChangeNotifier {
   // Cold start with no internet: open Home from this account's last snapshot. False if there's
   // none (first install, after sign-out, another account) — then the Guddi offline screen stays.
   Future<bool> openFromCache() async {
+    if (!offlineStorageSupported) return false; // web: Guddi's offline screen, as before
     final uid = Supabase.instance.client.auth.currentUser?.id;
     if (uid == null) return false;
     try {
@@ -1937,6 +1947,7 @@ class AppState extends ChangeNotifier {
     final uid = Supabase.instance.client.auth.currentUser?.id;
     final meta = deedCatalog[type];
     if (uid == null || meta == null) return const SubmitResult(flagged: false, leveledUpTier: null, newMilestones: nothing, saveFailed: true);
+    if (!offlineStorageSupported) return const SubmitResult(flagged: false, leveledUpTier: null, newMilestones: nothing, offlineUnsupported: true);
     await _loadQueueFor(uid);
     if (!cooldownChecked && cooldownRemaining(type) > Duration.zero) {
       return const SubmitResult(flagged: false, leveledUpTier: null, newMilestones: nothing, blockedByCooldown: true);
@@ -2024,7 +2035,7 @@ class AppState extends ChangeNotifier {
       deedHistoryLoaded = true;
       return null;
     } catch (e) {
-      return 'Could not create your profile: ${e.toString()}';
+      return "Couldn't create your profile. Check your connection and try again.";
     }
   }
 
@@ -2058,7 +2069,7 @@ class AppState extends ChangeNotifier {
       }).eq('id', uid);
       return null;
     } catch (e) {
-      return 'Could not save your changes: ${e.toString()}';
+      return "Couldn't save your changes. Check your connection and try again.";
     }
   }
 
@@ -2077,7 +2088,7 @@ class AppState extends ChangeNotifier {
       });
       return null;
     } catch (e) {
-      return 'Could not submit your request: ${e.toString()}';
+      return "Couldn't submit your request. Check your connection and try again.";
     }
   }
 }
