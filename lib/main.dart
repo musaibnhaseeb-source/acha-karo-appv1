@@ -13,6 +13,7 @@ import 'screens/welcome_animation_screen.dart';
 import 'widgets/animated_wallpaper.dart';
 import 'utils/notifications.dart';
 import 'utils/daily_reminder.dart';
+import 'utils/town_voice_reminder.dart';
 import 'widgets/update_available_dialog.dart';
 import 'widgets/guddi_loading.dart';
 import 'utils/startup_loader.dart';
@@ -125,6 +126,7 @@ class _RootScreenState extends State<RootScreen> with WidgetsBindingObserver {
     _authSub = Supabase.instance.client.auth.onAuthStateChange.listen((data) {
       if (data.event == AuthChangeEvent.signedOut && mounted) {
         DailyReminder.cancelAll(); // no "Guddi is waiting" nudges for a signed-out phone
+        TownVoiceReminder.signOut(); // cancel it and forget the opt-in
         _disposeStartupLoader();
         _startupFailed = false;
         // Offline queue (deeds + photos) and the Home cache are deleted from the phone.

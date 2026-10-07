@@ -20,6 +20,7 @@ import '../utils/network_errors.dart';
 import 'package:path_provider/path_provider.dart';
 import '../data/guddi_content.dart';
 import '../utils/points_notifier.dart';
+import '../utils/town_voice_reminder.dart';
 
 const Duration cooldownDuration = Duration(hours: 1); // same 1hr cooldown as the original
 
@@ -428,6 +429,8 @@ class AppState extends ChangeNotifier {
           timeLabel: row['town_voice_time_label'] as String? ?? townVoice.timeLabel,
           durationLabel: row['town_voice_duration_label'] as String? ?? townVoice.durationLabel,
           active: row['town_voice_active'] as bool? ?? false,
+          // Column may not exist yet: a missing key reads as null = no reminder.
+          startsAt: DateTime.tryParse(row['town_voice_starts_at'] as String? ?? '')?.toUtc(),
         );
         weeklyLeaderboardActive = row['weekly_leaderboard_active'] as bool? ?? false;
       }
@@ -435,6 +438,8 @@ class AppState extends ChangeNotifier {
       remoteConfig = RemoteConfig(townVoice: townVoice, campaigns: campaigns, weeklyLeaderboardActive: weeklyLeaderboardActive);
       remoteConfigLoadedAt = DateTime.now();
       notifyListeners();
+      // An opted-in Town Voice reminder follows the current start time (or is cancelled).
+      unawaited(TownVoiceReminder.sync(uid: Supabase.instance.client.auth.currentUser?.id, tv: townVoice));
     } catch (_) {
       // Stays on the local defaults already set — better than showing nothing.
     }

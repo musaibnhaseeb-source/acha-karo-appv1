@@ -5,6 +5,9 @@ import '../theme/app_theme.dart';
 import '../state/app_state.dart';
 import '../widgets/animated_wallpaper.dart';
 import '../utils/youtube.dart';
+import '../utils/town_voice_reminder.dart';
+import '../data/remote_config.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 // Rebuilt for real, replacing the earlier "launching soon" placeholder — controlled entirely by
 // app_config.town_voice_active now (see town_voice_activation.sql), no code change needed to
@@ -128,9 +131,11 @@ class _ActiveContent extends StatelessWidget {
               Text('$leaderPoints pts so far', style: AppFonts.inter(size: 12, color: AppColors.textSoft)),
               const SizedBox(height: 14),
               Row(children: [
-                Expanded(child: _InfoChip(label: 'Date', value: tv.dayLabel)),
+                // With a real start time (town_voice_starts_at) the date/time are shown in this
+                // phone's own time zone; otherwise the admin's text labels, as before.
+                Expanded(child: _InfoChip(label: 'Date', value: tv.startsAt != null ? TownVoiceReminder.localLabels(tv.startsAt!).$1 : tv.dayLabel)),
                 const SizedBox(width: 8),
-                Expanded(child: _InfoChip(label: 'Time', value: tv.timeLabel)),
+                Expanded(child: _InfoChip(label: 'Time', value: tv.startsAt != null ? TownVoiceReminder.localLabels(tv.startsAt!).$2 : tv.timeLabel)),
                 const SizedBox(width: 8),
                 Expanded(child: _InfoChip(label: 'Length', value: tv.durationLabel)),
               ]),
@@ -141,18 +146,11 @@ class _ActiveContent extends StatelessWidget {
               ),
               const SizedBox(height: 14),
               Row(children: [
-                Expanded(
-                  child: GestureDetector(
-                    onTap: () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Notifications for this — coming soon.'))),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      decoration: BoxDecoration(color: AppColors.gold, borderRadius: BorderRadius.circular(12)),
-                      alignment: Alignment.center,
-                      child: Text('🔔 Notify me', style: AppFonts.inter(size: 12.5, weight: FontWeight.w700, color: AppColors.inkOnGold)),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
+                // Only when there's a real start time still ahead (see TownVoiceReminder).
+                if (TownVoiceReminder.canRemind(tv)) ...[
+                  Expanded(child: _NotifyMeButton(tv: tv)),
+                  const SizedBox(width: 8),
+                ],
                 Expanded(
                   child: GestureDetector(
                     onTap: () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Add to calendar — coming soon.'))),
@@ -207,6 +205,74 @@ class _InfoChip extends StatelessWidget {
         const SizedBox(height: 3),
         Text(value, style: AppFonts.inter(size: 12, weight: FontWeight.w600)),
       ]),
+    );
+  }
+}
+
+// "🔔 Notify me" ⇄ "🔔 Reminder set" (tap to cancel). Permission is asked here, in context.
+class _NotifyMeButton extends StatefulWidget {
+  final TownVoiceConfig tv;
+  const _NotifyMeButton({required this.tv});
+  @override
+  State<_NotifyMeButton> createState() => _NotifyMeButtonState();
+}
+
+class _NotifyMeButtonState extends State<_NotifyMeButton> {
+  bool? _set; // null while the saved choice is read
+  bool _busy = false;
+
+  String? get _uid => Supabase.instance.client.auth.currentUser?.id;
+
+  @override
+  void initState() {
+    super.initState();
+    final uid = _uid;
+    if (uid == null) {
+      _set = false;
+    } else {
+      TownVoiceReminder.isOptedIn(uid).then((v) {
+        if (mounted) setState(() => _set = v);
+      });
+    }
+  }
+
+  Future<void> _toggle() async {
+    final uid = _uid;
+    if (uid == null || _busy || _set == null) return;
+    setState(() => _busy = true);
+    final messenger = ScaffoldMessenger.of(context);
+    if (_set!) {
+      await TownVoiceReminder.optOut(uid);
+      _set = false;
+      messenger.showSnackBar(const SnackBar(content: Text(TownVoiceReminderCopy.cancelledSnack)));
+    } else {
+      final ok = await TownVoiceReminder.optIn(uid: uid, tv: widget.tv);
+      _set = ok;
+      messenger.showSnackBar(SnackBar(content: Text(ok ? TownVoiceReminderCopy.setSnack : TownVoiceReminderCopy.permissionOffSnack)));
+    }
+    if (mounted) setState(() => _busy = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final set = _set ?? false;
+    return GestureDetector(
+      key: const ValueKey('town-voice-notify'),
+      onTap: _toggle,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        constraints: const BoxConstraints(minHeight: 44),
+        decoration: BoxDecoration(
+          color: set ? AppColors.oliveCardStrong : AppColors.gold,
+          borderRadius: BorderRadius.circular(12),
+          border: set ? Border.all(color: AppColors.gold.withOpacity(0.5)) : null,
+        ),
+        alignment: Alignment.center,
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Text(set ? TownVoiceReminderCopy.set : TownVoiceReminderCopy.notify, style: AppFonts.inter(size: 12.5, weight: FontWeight.w700, color: set ? AppColors.gold : AppColors.inkOnGold)),
+          if (set) Text(TownVoiceReminderCopy.cancelHint, style: AppFonts.inter(size: 9.5, color: AppColors.textSoft)),
+        ]),
+      ),
     );
   }
 }

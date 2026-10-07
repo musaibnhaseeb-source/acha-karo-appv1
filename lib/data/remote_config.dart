@@ -14,7 +14,10 @@ class TownVoiceConfig {
   final String timeLabel;
   final String durationLabel;
   final bool active; // new — the real on/off switch; false shows the "launching soon" placeholder
-  const TownVoiceConfig({required this.streamUrl, required this.dayLabel, required this.timeLabel, required this.durationLabel, required this.active});
+  // app_config.town_voice_starts_at (UTC). Null = not set: no "Notify me", and the text labels
+  // above are shown instead of a real date/time.
+  final DateTime? startsAt;
+  const TownVoiceConfig({required this.streamUrl, required this.dayLabel, required this.timeLabel, required this.durationLabel, required this.active, this.startsAt});
 }
 
 // A campaign the team wants to run — e.g. a seasonal push, a partner promotion. "active" is the
