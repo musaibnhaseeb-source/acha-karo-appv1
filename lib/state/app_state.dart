@@ -336,6 +336,7 @@ class AppState extends ChangeNotifier {
   Map<String, dynamic>? _updateCheckProfile;
 
   Future<void> checkForUpdate() async {
+    if (kIsWeb) return; // PWA: a reload always serves the latest build — nothing to download.
     try {
       final uid = Supabase.instance.client.auth.currentUser?.id;
       if (uid == null) return;
