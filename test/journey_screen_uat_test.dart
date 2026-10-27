@@ -11,7 +11,7 @@ void main() {
     repo.switchUser('uat-user-started'); // 1 deed on every campaign
     repo.setClaimMode(UatClaimMode.forceWin);
     await tester.binding.setSurfaceSize(const Size(500, 1000));
-    await tester.pumpWidget(MaterialApp(home: UatShell(repository: repo)));
+    await tester.pumpWidget(MaterialApp(home: UatShell(repository: repo, startInSideView: false)));
     await tester.pumpAndSettle();
 
     expect(find.textContaining('locked'), findsWidgets);
@@ -32,7 +32,7 @@ void main() {
   });
 
   testWidgets('UAT app shows the UAT banner', (tester) async {
-    await tester.pumpWidget(const UatApp());
+    await tester.pumpWidget(const MaterialApp(home: UatShell(startInSideView: false)));
     await tester.pumpAndSettle();
     expect(find.byType(Banner), findsWidgets);
     expect(find.textContaining('seeded data'), findsOneWidget);

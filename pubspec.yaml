@@ -68,3 +68,14 @@ flutter:
     # needed a proper assets declaration that never existed before.
     - assets/images/
     - assets/images/guddi/     # Guddi poses for the first-deed onboarding tour
+    # Side-scroller journey clips (transparent WebP frame sequences), one folder per clip
+    - assets/images/guddi/journey/idle/
+    - assets/images/guddi/journey/walk_start/
+    - assets/images/guddi/journey/walk_loop/
+    - assets/images/guddi/journey/walk_stop/
+    - assets/images/guddi/journey/celebrate/
+    - assets/images/guddi/journey/return/
+    # Side-scroller scenery (one folder per theme) and the gift effect
+    - assets/images/journey/
+    - assets/images/journey/general/
+    - assets/images/journey/road/

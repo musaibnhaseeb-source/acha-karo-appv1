@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import '../journey/guddi_clips.dart';
 import '../screens/journey_screen.dart';
+import '../screens/journey_side_screen.dart';
 import 'uat_journey_repository.dart';
 import 'uat_rules.dart';
 
@@ -26,7 +28,8 @@ class UatApp extends StatelessWidget {
 
 class UatShell extends StatefulWidget {
   final UatJourneyRepository? repository;
-  const UatShell({super.key, this.repository});
+  final bool startInSideView; // side-scroller first (default); tests of the list view pass false
+  const UatShell({super.key, this.repository, this.startInSideView = true});
   @override
   State<UatShell> createState() => _UatShellState();
 }
@@ -36,6 +39,24 @@ class _UatShellState extends State<UatShell> {
   late String campaignId = repo.campaigns.first.campaign.id;
 
   @override
+  void initState() {
+    super.initState();
+    // Demo shortcuts on web: ?campaign=short|classic|long and ?user=a|b|c|d|e preselect what you look at.
+    final q = Uri.base.queryParameters;
+    final c = q['campaign'];
+    if (c != null) {
+      final hit = repo.campaigns.where((x) => x.campaign.id == 'uat-$c').toList();
+      if (hit.isNotEmpty) campaignId = hit.first.campaign.id;
+    }
+    final u = q['user'];
+    if (u != null && u.length == 1) {
+      final i = u.toLowerCase().codeUnitAt(0) - 'a'.codeUnitAt(0);
+      if (i >= 0 && i < repo.users.length) repo.switchUser(repo.users[i].id);
+    }
+  }
+  late bool sideView = widget.startInSideView; // side-scroller or the plain list view
+
+  @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
       listenable: repo,
@@ -43,7 +64,10 @@ class _UatShellState extends State<UatShell> {
         appBar: AppBar(
           title: const Text('UAT · seeded data · no network', style: TextStyle(fontSize: 14)),
           backgroundColor: const Color(0xFF5A2A1E),
-          actions: [Builder(builder: (ctx) => IconButton(key: const ValueKey('open-controls'), icon: const Icon(Icons.tune), onPressed: () => Scaffold.of(ctx).openEndDrawer()))],
+          actions: [
+            IconButton(key: const ValueKey('toggle-view'), tooltip: sideView ? 'Show list view' : 'Show side-scroller', icon: Icon(sideView ? Icons.view_list : Icons.directions_walk), onPressed: () => setState(() => sideView = !sideView)),
+            Builder(builder: (ctx) => IconButton(key: const ValueKey('open-controls'), icon: const Icon(Icons.tune), onPressed: () => Scaffold.of(ctx).openEndDrawer())),
+          ],
         ),
         endDrawer: Drawer(child: _controls()),
         body: Column(children: [
@@ -61,7 +85,18 @@ class _UatShellState extends State<UatShell> {
                 ),
             ]),
           ),
-          Expanded(child: JourneyScreen(repository: repo, campaignId: campaignId)),
+          Expanded(
+            child: sideView
+                ? JourneySideScreen(
+                    repository: repo,
+                    campaignId: campaignId,
+                    clips: defaultGuddiClips,
+                    snapKey: '${repo.user.id}|$campaignId',
+                    onAchaKaam: () => repo.completeAchaKaam(campaignId),
+                    onSkin: () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Skin selector: Default only (UAT)'))),
+                  )
+                : JourneyScreen(repository: repo, campaignId: campaignId),
+          ),
         ]),
       ),
     );

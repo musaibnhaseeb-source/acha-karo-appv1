@@ -10,6 +10,7 @@ import 'roadmap_data.dart';
 class JourneyTheme {
   final String id;
   final String name;
+  final String title; // header title of the side screen
   final Color bgColor1;
   final Color bgColor2;
   final Color roadColor;
@@ -19,6 +20,19 @@ class JourneyTheme {
   final String stopIconClaimed;
   final String accessory; // emoji for now; the design spec may swap this for an asset path
   final String? backgroundAsset;
+  // Side-scroller scene pack (design: journey_side_v2). Pure client-side data; all optional.
+  final Color skyTop;
+  final Color skyHorizon;
+  final Color glow;
+  final Color skyDots;
+  final String farStyle; // 'hills' | 'skyline'
+  final Color farA, farB;
+  final String midStyle; // 'trees' | 'lamps'
+  final Color midColor;
+  final Color groundRoad, groundKerb, groundDash;
+  final List<String> landmarks; // landmark kind per stop index, cycled if fewer than stops
+  final List<String> stopIcons; // emoji for the next stop on the strip/card, cycled
+  final String? artFolder; // assets/images/journey/<artFolder>/ real scenery; null = code-drawn placeholders
   const JourneyTheme({
     required this.id,
     required this.name,
@@ -26,11 +40,27 @@ class JourneyTheme {
     required this.bgColor2,
     required this.roadColor,
     required this.accentColor,
+    this.title = 'Acha Kaam Journey',
     this.stopIconLocked = '🔒',
     this.stopIconReached = '🎁',
     this.stopIconClaimed = '✅',
     this.accessory = '🌳',
     this.backgroundAsset,
+    this.skyTop = const Color(0xFF0B1710),
+    this.skyHorizon = const Color(0xFF173727),
+    this.glow = const Color(0x4DD9A62E),
+    this.skyDots = const Color(0xFFD9A62E),
+    this.farStyle = 'hills',
+    this.farA = const Color(0xFF17331F),
+    this.farB = const Color(0xFF1B3B25),
+    this.midStyle = 'trees',
+    this.midColor = const Color(0xFF1F4529),
+    this.groundRoad = const Color(0xFF0B1710),
+    this.groundKerb = const Color(0xFF27472F),
+    this.groundDash = const Color(0x4DF6F5EC),
+    this.landmarks = const ['sprout', 'tree', 'stall', 'lamp', 'flagpost', 'arch'],
+    this.stopIcons = const ['🌱', '🤝', '🌳', '💛', '🏃', '🏆'],
+    this.artFolder,
   });
 
   // Same values AppColors uses today (bg1/bg2/oliveDeep/gold), written as literals so this data
@@ -42,14 +72,24 @@ class JourneyTheme {
     bgColor2: Color(0xFF0F2016),
     roadColor: Color(0xFF3C4A2C),
     accentColor: Color(0xFFD9A62E),
+    artFolder: 'general',
   );
+}
+
+// Optional per-stop wording (UAT sample copy for now): a one-line message for the expanded card and an
+// "arrive" line shown when she reaches the stop. Real campaigns can leave this empty.
+class StopCopy {
+  final String message;
+  final String arrive;
+  const StopCopy(this.message, this.arrive);
 }
 
 class JourneyConfig {
   final Campaign campaign;
   final List<RoadmapStop> stops; // ascending by threshold
   final JourneyTheme theme;
-  const JourneyConfig({required this.campaign, required this.stops, this.theme = JourneyTheme.fallback});
+  final Map<String, StopCopy> copy; // stopId -> wording
+  const JourneyConfig({required this.campaign, required this.stops, this.theme = JourneyTheme.fallback, this.copy = const {}});
 }
 
 // roadmap_claims stores only `won` per (user, stop), so that is all a record carries.

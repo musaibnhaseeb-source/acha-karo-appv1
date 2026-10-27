@@ -38,6 +38,11 @@ void main() {
       'lib/screens/journey_screen.dart',
       'lib/data/journey_models.dart',
       'lib/data/journey_repository.dart',
+      'lib/screens/journey_side_screen.dart',
+      'lib/journey/side_scroller_logic.dart',
+      'lib/journey/scene_painters.dart',
+      'lib/journey/guddi_clip_player.dart',
+      'lib/journey/guddi_clips.dart',
     ];
     for (final p in files) {
       for (final i in importsOf(File(p))) {
