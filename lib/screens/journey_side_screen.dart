@@ -7,6 +7,7 @@ import '../journey/guddi_clip_player.dart';
 import '../journey/guddi_clips.dart';
 import '../journey/scene_painters.dart';
 import '../journey/side_scroller_logic.dart';
+import '../widgets/campaign_icon.dart';
 
 // Side-scrolling journey (design: journey_side_v2). Guddi walks in place on the left, the world scrolls
 // past, and at a stop she jumps; a compact card at the top right shows the approaching stop (progress
@@ -421,7 +422,7 @@ class _JourneySideScreenState extends State<JourneySideScreen> with SingleTicker
     final Widget icon = st == LandmarkState.locked ? const Icon(Icons.lock, size: 15, color: _textSoft) : Text(t.stopIcons[i % t.stopIcons.length], style: const TextStyle(fontSize: 16));
     final label = const {LandmarkState.locked: 'Locked', LandmarkState.next: 'Next stop', LandmarkState.ready: 'Reached', LandmarkState.claimed: 'Claimed'}[st]!;
     final pillColor = st == LandmarkState.ready ? _gold : (st == LandmarkState.claimed ? _olive : (st == LandmarkState.next ? _gold : _textSoft));
-    final Widget pz = st == LandmarkState.locked ? const Icon(Icons.lock_outline, size: 16, color: _textSoft) : Text(s.prize.icon, style: const TextStyle(fontSize: 17));
+    final Widget pz = st == LandmarkState.locked ? const Icon(Icons.lock_outline, size: 16, color: _textSoft) : CampaignIcon(icon: s.prize.icon, size: 17);
     final pct = (p.deedsDone / s.threshold).clamp(0.0, 1.0);
     Widget r2;
     if (st == LandmarkState.ready) {

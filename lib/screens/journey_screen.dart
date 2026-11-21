@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../data/journey_models.dart';
 import '../data/journey_repository.dart';
 import '../data/roadmap_data.dart';
+import '../utils/icon_value.dart';
 
 // Journey-map screen, data side. Everything comes through a JourneyRepository, so the same screen
 // runs on live data or on the seeded UAT repository. The visuals here are a plain functional
@@ -55,7 +56,7 @@ class _JourneyScreenState extends State<JourneyScreen> {
     if (p.deedsDone < stop.threshold) return;
     final record = p.claims[stop.id];
     if (record != null) {
-      await _info(stop.label, record.won ? '${stop.prize.icon}  You won: ${stop.prize.name}' : "📭  You didn't win here");
+      await _info(stop.label, record.won ? '${displayIcon(stop.prize.icon)}  You won: ${stop.prize.name}' : "📭  You didn't win here");
       return;
     }
     final index = await showModalBottomSheet<int>(

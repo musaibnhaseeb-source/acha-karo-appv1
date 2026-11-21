@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../data/remote_config.dart';
+import '../screens/campaign_detail_screen.dart';
 import '../screens/campaign_journey_screen.dart';
 import '../state/app_state.dart';
 import '../uat/uat_journey_repository.dart';
@@ -17,13 +19,19 @@ void main() async {
   final repo = UatJourneyRepository();
   final user = Uri.base.queryParameters['user'];
   if (user != null) repo.switchUser(user);
-  final seed = repo.campaigns[int.tryParse(Uri.base.queryParameters['campaign'] ?? '') ?? 0];
+  var campaign = repo.campaigns[int.tryParse(Uri.base.queryParameters['campaign'] ?? '') ?? 0].campaign;
+  // ?icon=directions_bike previews a stored value that is not an emoji (it must still draw as an icon).
+  final icon = Uri.base.queryParameters['icon'];
+  if (icon != null) campaign = Campaign(id: campaign.id, title: campaign.title, description: campaign.description, icon: icon, active: true);
   runApp(ChangeNotifierProvider<AppState>(
     create: (_) => AppState(),
     child: MaterialApp(
       debugShowCheckedModeBanner: false,
       theme: ThemeData(useMaterial3: true, brightness: Brightness.dark),
-      home: CampaignJourneyScreen(campaign: seed.campaign, debugRepository: repo),
+      // ?screen=detail shows the campaign's info page, where the campaign icon is drawn large.
+      home: Uri.base.queryParameters['screen'] == 'detail'
+          ? CampaignDetailScreen(campaign: campaign)
+          : CampaignJourneyScreen(campaign: campaign, debugRepository: repo),
     ),
   ));
 }

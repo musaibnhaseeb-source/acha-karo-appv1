@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../utils/icon_value.dart';
 
 // Detects whether a campaign's icon field is a plain emoji character or an image/GIF URL, and
 // renders the right thing either way. Image.network already plays animated GIFs natively in
@@ -26,6 +27,8 @@ class CampaignIcon extends StatelessWidget {
         ),
       );
     }
-    return Text(icon, style: TextStyle(fontSize: size));
+    // Free-text column: a name, shortcode or codepoint becomes its emoji, anything unknown the
+    // fallback — never the raw text.
+    return Text(displayIcon(icon), style: TextStyle(fontSize: size));
   }
 }
