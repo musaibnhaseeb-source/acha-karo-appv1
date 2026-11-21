@@ -73,9 +73,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
         children: [
           // No wallpaper of its own: Profile is a tab inside RootScreen, whose wallpaper already
           // shows through. A second one here was a second set of blurred blobs animating on top.
+          // bottom: false — MainTabScreen floats the nav bar over the body and passes its height down
+          // as bottom padding. SafeArea would take that as an inset and end the scroll view at the
+          // bar's top edge (a flat full-width strip behind the pill). Pad the content instead, as Home does.
           SafeArea(
+            bottom: false,
             child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(18, 10, 18, 90),
+              padding: EdgeInsets.fromLTRB(18, 10, 18, 24 + MediaQuery.paddingOf(context).bottom),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
