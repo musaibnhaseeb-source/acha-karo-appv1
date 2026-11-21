@@ -13,7 +13,7 @@ import '../widgets/cooldowns_sheet.dart';
 import '../widgets/home_side_sheet.dart';
 import 'town_voice_screen.dart';
 import 'leaderboard_screen.dart';
-import 'campaign_detail_screen.dart';
+import 'campaign_journey_screen.dart';
 import '../widgets/campaign_icon.dart';
 import '../widgets/big_tile.dart';
 import '../utils/youtube.dart';
@@ -428,7 +428,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     name: c.title,
                     description: c.description,
-                    onTap: state.isOffline ? () => showNeedsInternet(context) : () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => CampaignDetailScreen(campaign: c))),
+                    onTap: state.isOffline ? () => showNeedsInternet(context) : () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => CampaignJourneyScreen(campaign: c))),
                   ),
                   // New — real tick mark once this campaign's Hall of Fame is genuinely
                   // claimed, per direction: an at-a-glance "you've finished this one" signal

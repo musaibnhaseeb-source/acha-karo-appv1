@@ -28,6 +28,9 @@ class SupabaseJourneyRepository implements JourneyRepository {
   @override
   Listenable get changes => _changes;
 
+  // The screen reloads when this fires; the host calls it when the approved-deed count changes.
+  void refresh() => _changes.ping();
+
   SupabaseClient get _db => Supabase.instance.client;
 
   @override

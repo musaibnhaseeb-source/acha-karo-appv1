@@ -29,6 +29,8 @@ class JourneySideScreen extends StatefulWidget {
   final Object? snapKey;
   final VoidCallback? onAchaKaam; // the bottom button (in UAT: +1 acha kaam)
   final VoidCallback? onSkin; // the skin button
+  final void Function(JourneyConfig, JourneyProgress)? onLoaded; // after every successful load (production: Hall of Fame button)
+  final VoidCallback? onFinalWin; // after the claim dialog, when the campaign's last stop was won
   const JourneySideScreen({
     super.key,
     required this.repository,
@@ -37,6 +39,8 @@ class JourneySideScreen extends StatefulWidget {
     this.snapKey,
     this.onAchaKaam,
     this.onSkin,
+    this.onLoaded,
+    this.onFinalWin,
   });
   @override
   State<JourneySideScreen> createState() => _JourneySideScreenState();
@@ -115,6 +119,7 @@ class _JourneySideScreenState extends State<JourneySideScreen> with SingleTicker
         if (_snapNext) camera.value = l.worldX;
         _snapNext = false;
       });
+      widget.onLoaded?.call(c, p);
       final folder = c.theme.artFolder;
       if (folder != _artFolder) {
         _artFolder = folder;
@@ -185,6 +190,9 @@ class _JourneySideScreenState extends State<JourneySideScreen> with SingleTicker
       final o = await widget.repository.claimStop(stop.id, index);
       await widget.repository.refreshAfterClaim();
       if (mounted) await _info(_title(o), _body(stop, o));
+      // Same rule as the old RoadmapScreen: only a win at the highest-threshold stop leads to the Hall of Fame.
+      final lastThreshold = config!.stops.map((s) => s.threshold).reduce((a, b) => a > b ? a : b);
+      if (mounted && o.won && stop.threshold == lastThreshold) widget.onFinalWin?.call();
     } on JourneyException catch (e) {
       if (mounted) await _info('Could not claim', e.message);
     }

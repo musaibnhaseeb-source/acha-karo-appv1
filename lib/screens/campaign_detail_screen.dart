@@ -8,7 +8,6 @@ import '../widgets/campaign_icon.dart';
 import '../widgets/animated_wallpaper.dart';
 import '../widgets/flip_card.dart';
 import '../utils/youtube.dart';
-import 'roadmap_screen.dart';
 
 // New screen — tapping the campaign card on Home opens this. Hosts a real flip card (front:
 // campaign intro; back: YouTube link + CTA + running dates), everything on it driven by the
@@ -235,7 +234,8 @@ class _CardBack extends StatelessWidget {
               // onto the Roadmap screen itself (see roadmap_screen.dart), where it now serves the
               // same purpose — a fast way to log a real deed — from a more natural point in the
               // flow. ctaLink still unused (kept in the schema in case it's wanted later).
-              onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => RoadmapScreen(campaign: campaign))),
+              // The road is the journey screen now (this page opens from its info button), so the CTA goes back to it.
+              onTap: () => Navigator.of(context).pop(),
               child: Container(
                 width: double.infinity,
                 padding: const EdgeInsets.symmetric(vertical: 13),
