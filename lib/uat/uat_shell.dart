@@ -62,7 +62,7 @@ class _UatShellState extends State<UatShell> {
       listenable: repo,
       builder: (context, _) => Scaffold(
         appBar: AppBar(
-          title: const Text('UAT · seeded data · no network', style: TextStyle(fontSize: 14)),
+          title: const Padding(padding: EdgeInsets.only(left: 28), child: Text('UAT · seeded data · no network', style: TextStyle(fontSize: 14))),
           backgroundColor: const Color(0xFF5A2A1E),
           actions: [
             IconButton(key: const ValueKey('toggle-view'), tooltip: sideView ? 'Show list view' : 'Show side-scroller', icon: Icon(sideView ? Icons.view_list : Icons.directions_walk), onPressed: () => setState(() => sideView = !sideView)),
@@ -133,7 +133,7 @@ class _UatShellState extends State<UatShell> {
         const Text('Claim result'),
         SegmentedButton<UatClaimMode>(
           segments: const [
-            ButtonSegment(value: UatClaimMode.random, label: Text('Random')),
+            ButtonSegment(value: UatClaimMode.random, label: Text('Random', softWrap: false)),
             ButtonSegment(value: UatClaimMode.forceWin, label: Text('Win')),
             ButtonSegment(value: UatClaimMode.forceLose, label: Text('Lose')),
           ],
